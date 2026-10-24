@@ -10,7 +10,7 @@
   var cloudReady = false;
   var seeking = false;
   var playHistory = [];
-  var unsubscribeSnapshot = null; // 用來取消監聽
+  var unsubscribeSnapshot = null; 
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -159,7 +159,7 @@
     }
   }
 
-  // 即時監聽雲端資料(首次與本機合併,之後以雲端為準)
+  // 即時監聽雲端資料
   function listenDraftFromCloud() {
     if (!currentUser || !dbAPI) return;
     if (unsubscribeSnapshot) unsubscribeSnapshot();
@@ -198,7 +198,7 @@
     });
   }
 
-  /* ============ 播放紀錄(分享連結 / NFC) ============ */
+  /* ============ 播放紀錄 ============ */
   function loadHistory() {
     try {
       var a = JSON.parse(localStorage.getItem(LS_KEY + ':history'));
@@ -529,6 +529,7 @@
   var tapTimer = null;
   var lastSec = -1;
   var currentPlayCode = null;
+  var ytApiReady = false;
 
   function packPayload(pl) {
     var mini = {
@@ -713,44 +714,71 @@
     if (!s) return;
     var vid = parseVideoId(s.videoId);
 
+    // 如果 Player 已存在且可用，直接載入新影片
     if (player && player.loadVideoById) {
-      player.loadVideoById(vid);
+      try {
+        player.loadVideoById(vid);
+      } catch (e) {
+        console.warn('Load video failed, recreating player', e);
+        destroyPlayer();
+        createYTPlayer(vid);
+      }
       return;
     }
 
-    if (window.YT && YT.Player) {
-      createYTPlayer(vid);
+    // 如果 API 還沒載入
+    if (!ytApiReady) {
+      if (!window._ytLoading) {
+        window._ytLoading = true;
+        var tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(tag);
+      }
+      // 等待 API Ready
+      window.onYouTubeIframeAPIReady = function () {
+        window._ytLoading = false;
+        ytApiReady = true;
+        createYTPlayer(parseVideoId(playlist.songs[currentIndex].videoId));
+      };
       return;
     }
 
-    if (!window._ytLoading) {
-      window._ytLoading = true;
-      var tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      document.head.appendChild(tag);
+    // API 已載入但 Player 未建立
+    createYTPlayer(vid);
+  }
+
+  function destroyPlayer() {
+    if (player) {
+      try { player.destroy(); } catch (e) {}
+      player = null;
     }
-    window.onYouTubeIframeAPIReady = function () {
-      window._ytLoading = false;
-      createYTPlayer(parseVideoId(playlist.songs[currentIndex].videoId));
-    };
   }
 
   function createYTPlayer(videoId) {
+    // 確保容器存在
+    var host = $('ytHost');
+    if (!host) return;
+
     var vars = {
       autoplay: 0, controls: 0, disablekb: 1,
       modestbranding: 1, rel: 0, playsinline: 1, fs: 0
     };
     if (location.protocol.indexOf('http') === 0) vars.origin = location.origin;
 
-    player = new YT.Player('ytHost', {
-      videoId: videoId,
-      playerVars: vars,
-      events: {
-        onReady: onYTReady,
-        onStateChange: onYTStateChange,
-        onError: onYTError
-      }
-    });
+    try {
+      player = new YT.Player('ytHost', {
+        videoId: videoId,
+        playerVars: vars,
+        events: {
+          onReady: onYTReady,
+          onStateChange: onYTStateChange,
+          onError: onYTError
+        }
+      });
+    } catch (e) {
+      console.error('Failed to create YT Player', e);
+      toast('播放器初始化失敗');
+    }
   }
 
   function onYTReady() {
@@ -809,8 +837,15 @@
     if ($('dur')) $('dur').textContent = '0:00';
     lastSec = -1;
     var vid = parseVideoId(s.videoId);
+    
+    // 優先嘗試載入，失敗則重建
     if (player && player.loadVideoById) {
-      player.loadVideoById(vid);
+      try {
+        player.loadVideoById(vid);
+      } catch (err) {
+        destroyPlayer();
+        initYTPlayer();
+      }
     } else {
       initYTPlayer();
     }
@@ -970,6 +1005,7 @@
       return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
     }
     function dur() { return (player && player.getDuration) ? player.getDuration() : 0; }
+    
     seek.addEventListener('pointerdown', function (e) {
       if (!dur()) return;
       seeking = true;
@@ -978,11 +1014,13 @@
       last = ratio(e); setBar(last);
       $('cur').textContent = fmtTime(last * dur());
     });
+    
     seek.addEventListener('pointermove', function (e) {
       if (!seeking) return;
       last = ratio(e); setBar(last);
       $('cur').textContent = fmtTime(last * dur());
     });
+    
     function end(e) {
       if (!seeking) return;
       seeking = false;
@@ -990,6 +1028,7 @@
       if (e.type === 'pointerup') last = ratio(e);
       if (dur()) player.seekTo(last * dur(), true);
     }
+    
     seek.addEventListener('pointerup', end);
     seek.addEventListener('pointercancel', end);
   }
@@ -1050,7 +1089,6 @@
   }
 
   /* ============ 範本歌單 ============ */
-  // 填入你確認過可嵌入播放的 YouTube 影片 ID(或完整網址)後,範本才會顯示在首頁。
   var TEMPLATES = [
     { name: '熱門動漫 OP 精選', songs: [
       { anime: '鬼滅之刃', title: '紅蓮華', artist: 'LiSA', videoId: '' },
@@ -1420,7 +1458,7 @@
           overlay.classList.remove('show');
           setTimeout(() => { 
             overlay.hidden = true; 
-            targetEl.classList.remove('being-eaten');
+            if (targetEl) targetEl.classList.remove('being-eaten');
           }, 300);
           
           location.hash = '#home';
