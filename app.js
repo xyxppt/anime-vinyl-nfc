@@ -7,6 +7,7 @@
   var currentUser = null;
   var authAPI = null;
   var dbAPI = null;
+  var unsubscribeSnapshot = null; // 用來取消監聽
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -105,26 +106,49 @@
     }
   }
 
-  async function loadDraftFromCloud() {
+  // 改為即時監聽雲端資料
+  function listenDraftFromCloud() {
     if (!currentUser || !dbAPI) return;
-    try {
-      var docRef = dbAPI.doc(dbAPI.db, 'playlists', currentUser.uid);
-      var docSnap = await dbAPI.getDoc(docRef);
+    
+    // 取消先前的監聽
+    if (unsubscribeSnapshot) unsubscribeSnapshot();
+
+    var docRef = dbAPI.doc(dbAPI.db, 'playlists', currentUser.uid);
+    unsubscribeSnapshot = dbAPI.onSnapshot(docRef, function(docSnap) {
       if (docSnap.exists()) {
         var data = docSnap.data();
         if (data && Array.isArray(data.playlists)) {
+          
+          // 如果本地正在編輯（有未儲存的變更），先不覆蓋畫面，避免打字被中斷
+          if (isDirty) return;
+          
+          // 檢查資料是否真的有變化 (避免無限迴圈)
+          var newStr = JSON.stringify(data.playlists);
+          var oldStr = JSON.stringify(state.playlists);
+          if (newStr === oldStr) return;
+
           state.playlists = data.playlists;
+          saveDraft();
+          
+          // 更新畫面
+          var hash = location.hash || '';
+          if (hash === '' || hash === '#home') {
+            renderPlaylistGrid();
+          } else if (hash.startsWith('#edit/')) {
+            var pl = state.playlists.find(p => p.id === currentPlaylistId);
+            if (pl) {
+              $('playlistName').value = pl.name;
+              renderEditor();
+            }
+          }
         }
       } else {
-        await saveDraftToCloud(true);
+        // 雲端沒資料，把本機推上去
+        saveDraftToCloud(true);
       }
-      saveDraft();
-      renderPlaylistGrid();
-    } catch (e) {
-      console.error('雲端載入失敗', e);
-      toast('雲端載入失敗，使用本機資料');
-      renderPlaylistGrid();
-    }
+    }, function(error) {
+      console.error("監聽失敗:", error);
+    });
   }
 
   /* ============ 路由與權限控制 ============ */
@@ -469,7 +493,6 @@
       $('backLink').hidden = !currentUser;
     }
     
-    // 只有在預覽模式且已登入時，才顯示刪除按鈕
     if ($('deletePlayBtn')) {
       $('deletePlayBtn').style.display = (isPreview && currentUser) ? 'grid' : 'none';
     }
@@ -828,7 +851,7 @@
 
   /* ============ 刪除功能與動畫 ============ */
   var deleteTargetId = null;
-  var deleteSource = null; // 'edit' 或 'play'
+  var deleteSource = null;
 
   function openDeleteModal(id, source) {
     deleteTargetId = id;
@@ -836,7 +859,6 @@
     var modal = $('deleteModal');
     if (modal) {
       modal.hidden = false;
-      // 觸發 transition
       requestAnimationFrame(() => modal.classList.add('show'));
     }
   }
@@ -858,7 +880,6 @@
     var source = deleteSource;
     closeDeleteModal();
 
-    // 準備動畫
     var overlay = $('eatOverlay');
     var monster = $('monster');
     var targetEl = source === 'edit' ? $('editWrap') : $('playWrap');
@@ -867,22 +888,18 @@
       overlay.hidden = false;
       requestAnimationFrame(() => overlay.classList.add('show'));
 
-      // 1. 張嘴
       setTimeout(() => {
         monster.classList.add('open-mouth');
       }, 300);
 
-      // 2. 飛入嘴裡
       setTimeout(() => {
         targetEl.classList.add('being-eaten');
-        stopPlayback(); // 如果在播放頁，先停止音樂
+        stopPlayback();
       }, 600);
 
-      // 3. 閉嘴咀嚼，然後執行實際刪除
       setTimeout(() => {
         monster.classList.remove('open-mouth');
         
-        // 實際刪除邏輯
         var idx = state.playlists.findIndex(p => p.id === targetId);
         if (idx !== -1) {
           state.playlists.splice(idx, 1);
@@ -890,12 +907,11 @@
           if (currentUser) saveDraftToCloud(true);
         }
 
-        // 4. 動畫結束，返回首頁
         setTimeout(() => {
           overlay.classList.remove('show');
           setTimeout(() => { 
             overlay.hidden = true; 
-            targetEl.classList.remove('being-eaten'); // 重置樣式
+            targetEl.classList.remove('being-eaten');
           }, 300);
           
           location.hash = '#home';
@@ -903,7 +919,6 @@
 
       }, 1400);
     } else {
-      // 如果動畫失敗，直接執行刪除
       var idx = state.playlists.findIndex(p => p.id === targetId);
       if (idx !== -1) {
         state.playlists.splice(idx, 1);
@@ -915,21 +930,15 @@
   }
 
   function bindDeleteControls() {
-    // 編輯頁刪除按鈕
     if ($('deleteEditBtn')) {
       $('deleteEditBtn').addEventListener('click', function() {
         if (currentPlaylistId) openDeleteModal(currentPlaylistId, 'edit');
       });
     }
 
-    // 播放頁刪除按鈕
     if ($('deletePlayBtn')) {
       $('deletePlayBtn').addEventListener('click', function() {
-        // 從當前網址找出對應的歌單
         if (currentUser && state.playlists.length > 0) {
-          // 這裡比較麻煩，因為播放頁可能是從分享連結進來的
-          // 我們只能刪除當前使用者的歌單，且名稱必須相符
-          // 最簡單的方法：如果這首歌單在 state.playlists 裡，就允許刪除
           var matchedPl = state.playlists.find(p => p.name === playlist.name);
           if (matchedPl) {
             openDeleteModal(matchedPl.id, 'play');
@@ -940,7 +949,6 @@
       });
     }
 
-    // Modal 按鈕
     if ($('cancelDeleteBtn')) $('cancelDeleteBtn').addEventListener('click', closeDeleteModal);
     if ($('confirmDeleteBtn')) $('confirmDeleteBtn').addEventListener('click', executeDelete);
   }
@@ -998,8 +1006,15 @@
       
       if ($('backLink')) $('backLink').hidden = false;
       
-      loadDraftFromCloud();
+      // 啟動即時監聽
+      listenDraftFromCloud();
     } else {
+      // 登出時取消監聽
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = null;
+      }
+
       loginBtns.forEach(btn => { if (btn) btn.hidden = false; });
       profiles.forEach(prof => { if (prof) prof.hidden = true; });
       dropdowns.forEach(dd => { if (dd) dd.hidden = true; });
@@ -1086,7 +1101,7 @@
     bindEditorControls();
     bindPlayControls();
     bindAuthControls();
-    bindDeleteControls(); // 綁定刪除與動畫
+    bindDeleteControls();
     
     loadDraft();
     
