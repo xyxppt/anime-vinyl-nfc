@@ -28,8 +28,11 @@ main { width: 100%; display: flex; justify-content: center; }
 /* ===== 播放視圖 ===== */
 #viewPlay { flex-direction: column; align-items: center; justify-content: flex-start; }
 .play-wrap { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
-.top-bar { width: 100%; display: flex; align-items: center; justify-content: flex-end; position: relative; min-height: 34px; }
-.back-link { position: absolute; left: 0; color: var(--text-muted); text-decoration: none; font-size: 14px; padding: 8px 12px; border-radius: 8px; }
+
+.top-bar { width: 100%; display: flex; align-items: center; justify-content: space-between; position: relative; min-height: 40px; }
+.back-link { color: var(--text-muted); text-decoration: none; font-size: 14px; padding: 8px 12px 8px 0; border-radius: 8px; }
+.play-top-actions { display: flex; align-items: center; }
+
 .drawer-toggle { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); color: var(--text-main); padding: 8px 16px; border-radius: 999px; font-size: 13px; cursor: pointer; backdrop-filter: blur(8px); }
 
 .plinth-wrapper { position: relative; width: min(85vw, 340px); aspect-ratio: 1; display: flex; align-items: center; justify-content: center; margin-top: 10px; }
@@ -94,7 +97,7 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .di-artist { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ===== 總覽與編輯視圖通用 ===== */
-#viewList, #viewEdit { flex-direction: column; align-items: center; justify-content: flex-start; }
+#viewHome, #viewEdit { flex-direction: column; align-items: center; justify-content: flex-start; }
 .edit-wrap { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
 
 .edit-topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; position: relative; }
@@ -105,8 +108,8 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .btn-google { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .2s; }
 .btn-google:active { background: rgba(255,255,255,.1); }
 .user-profile { position: relative; cursor: pointer; }
-.user-profile img { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--accent); object-fit: cover; display: block; }
-.user-dropdown { position: absolute; top: 50px; right: 0; width: 220px; background: var(--panel); border: 1px solid rgba(255,255,255,.1); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.8); display: flex; flex-direction: column; overflow: hidden; z-index: 100; animation: fadeInDown .2s ease-out; }
+.user-profile img { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--accent); object-fit: cover; display: block; }
+.user-dropdown { position: absolute; top: 45px; right: 0; width: 220px; background: var(--panel); border: 1px solid rgba(255,255,255,.1); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.8); display: flex; flex-direction: column; overflow: hidden; z-index: 100; animation: fadeInDown .2s ease-out; }
 @keyframes fadeInDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 .dropdown-header { padding: 16px; background: rgba(255,255,255,.02); border-bottom: 1px solid rgba(255,255,255,.05); display: flex; flex-direction: column; gap: 4px; }
 .dropdown-header span { font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
