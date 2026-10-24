@@ -693,48 +693,14 @@
     });
   }
 
-  /* ============ Firebase 動態載入與登入 ============ */
-  function loadFirebase() {
-    var script = document.createElement('script');
-    script.type = 'module';
-    script.textContent = `
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-      import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-      import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-      const firebaseConfig = {
-        apiKey: "AIzaSyB1r6uz7hRPjZz3Ha5YJVRG28vt0B31MVo",
-        authDomain: "musicddjason.firebaseapp.com",
-        projectId: "musicddjason",
-        storageBucket: "musicddjason.firebasestorage.app",
-        messagingSenderId: "593507167093",
-        appId: "1:593507167093:web:c02484cc34d5d20432c13c",
-        measurementId: "G-WSYF3Z0BPE"
-      };
-
-      try {
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const provider = new GoogleAuthProvider();
-        
-        window.firebaseAuth = { auth, provider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, deleteUser };
-        window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc };
-        
-        window.dispatchEvent(new Event('firebaseReady'));
-      } catch (e) {
-        console.error("Firebase 初始化失敗", e);
-      }
-    `;
-    document.head.appendChild(script);
-  }
-
+  /* ============ 登入與 UI 更新 ============ */
   function setupAuth() {
     if (!window.firebaseAuth) return;
     
     authAPI = window.firebaseAuth;
     dbAPI = window.firebaseDB;
 
+    // 處理跳轉回來的結果
     authAPI.getRedirectResult(authAPI.auth).then(function(result) {
       if (result && result.user) {
         toast('登入成功！');
@@ -743,6 +709,7 @@
       console.warn('登入跳轉結果錯誤：', error);
     });
     
+    // 監聽登入狀態
     authAPI.onAuthStateChanged(authAPI.auth, function(user) {
       currentUser = user;
       
@@ -754,9 +721,10 @@
       var userDropdown = $('userDropdown');
       
       if (user) {
+        console.log('使用者已登入:', user.email);
         // 切換到已登入 UI
-        if (loginBtn) loginBtn.hidden = true;
-        if (userProfile) userProfile.hidden = false;
+        if (loginBtn) loginBtn.style.display = 'none';
+        if (userProfile) userProfile.style.display = 'block';
         
         if (userAvatar) userAvatar.src = user.photoURL || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
         if (userName) userName.textContent = user.displayName || '使用者';
@@ -765,9 +733,10 @@
         // 載入雲端資料
         loadDraftFromCloud();
       } else {
+        console.log('使用者未登入');
         // 切換到未登入 UI
-        if (loginBtn) loginBtn.hidden = false;
-        if (userProfile) userProfile.hidden = true;
+        if (loginBtn) loginBtn.style.display = 'flex';
+        if (userProfile) userProfile.style.display = 'none';
         if (userDropdown) userDropdown.hidden = true;
         
         // 載入本機資料
@@ -778,11 +747,25 @@
       }
     });
 
-    // 登入按鈕
+    // 登入按鈕 (自動判斷手機或電腦)
     if ($('loginBtn')) $('loginBtn').addEventListener('click', function() {
-      authAPI.signInWithRedirect(authAPI.auth, authAPI.provider).catch(function(error) {
-        toast('無法跳轉登入：' + error.message);
-      });
+      var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        // 手機端用跳轉
+        authAPI.signInWithRedirect(authAPI.auth, authAPI.provider).catch(function(error) {
+          toast('無法跳轉登入：' + error.message);
+        });
+      } else {
+        // 電腦端用彈出視窗
+        authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(function(error) {
+          if (error.code === 'auth/popup-blocked') {
+            toast('彈出視窗被阻擋，請允許後重試');
+          } else if (error.code !== 'auth/popup-closed-by-user') {
+            toast('登入失敗：' + error.message);
+          }
+        });
+      }
     });
 
     // 頭像點擊展開選單
@@ -801,10 +784,14 @@
     if ($('switchAccountBtn')) $('switchAccountBtn').addEventListener('click', function(e) {
       e.stopPropagation();
       if ($('userDropdown')) $('userDropdown').hidden = true;
-      // 先登出，再登入，並強制顯示帳號選擇器
       authAPI.signOut(authAPI.auth).then(function() {
         authAPI.provider.setCustomParameters({ prompt: 'select_account' });
-        authAPI.signInWithRedirect(authAPI.auth, authAPI.provider);
+        var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (isMobile) {
+          authAPI.signInWithRedirect(authAPI.auth, authAPI.provider);
+        } else {
+          authAPI.signInWithPopup(authAPI.auth, authAPI.provider);
+        }
       });
     });
 
@@ -825,17 +812,13 @@
       
       if (currentUser) {
         var uid = currentUser.uid;
-        
-        // 先刪除 Firestore 的資料
         if (dbAPI) {
           var docRef = dbAPI.doc(dbAPI.db, 'playlists', uid);
           dbAPI.deleteDoc(docRef).catch(console.error);
         }
 
-        // 再刪除 Firebase Auth 帳號
         authAPI.deleteUser(currentUser).then(function() {
           toast('帳號已刪除');
-          // 清除本機暫存
           localStorage.removeItem(LS_KEY);
           state = { name: '我的黑膠歌單', songs: [] };
           renderEditor();
@@ -853,13 +836,14 @@
 
   /* ============ 初始化 ============ */
   function init() {
+    // 1. 先綁定所有控制項與路由，確保畫面能顯示
     bindEditorControls();
     bindPlayControls();
     route();
     window.addEventListener('hashchange', route);
 
+    // 2. 監聽 Firebase 準備好的事件
     window.addEventListener('firebaseReady', setupAuth);
-    loadFirebase();
   }
 
   if (document.readyState === 'loading') {
