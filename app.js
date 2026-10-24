@@ -153,7 +153,6 @@
       return;
     }
 
-    // 切換回編輯頁面時，強制停止音樂
     stopPlayback();
 
     if (hash === '#play' || hash === '#preview') {
@@ -327,6 +326,7 @@
     renderPlayMeta();
     renderDrawer();
     initYTPlayer();
+    bindSwipeGestures(); // 綁定滑動手勢
   }
 
   function renderPlayMeta() {
@@ -497,6 +497,68 @@
   function showError(msg) {
     $('errorMsg').textContent = msg;
     show('viewError');
+  }
+
+  /* ============ 滑動手勢切歌 ============ */
+  function bindSwipeGestures() {
+    var plinth = document.querySelector('.plinth');
+    var vinyl = document.querySelector('.vinyl');
+    if (!plinth || !vinyl) return;
+
+    var startX = 0;
+    var startY = 0;
+    var isSwiping = false;
+
+    // 移除舊的監聽，避免重複綁定
+    plinth.replaceWith(plinth.cloneNode(true));
+    plinth = document.querySelector('.plinth');
+    vinyl = document.querySelector('.vinyl');
+
+    plinth.addEventListener('touchstart', function (e) {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      isSwiping = false;
+      vinyl.style.transition = 'none'; // 拖曳時取消過渡
+    }, { passive: true });
+
+    plinth.addEventListener('touchmove', function (e) {
+      if (!startX || !startY) return;
+      var diffX = e.touches[0].clientX - startX;
+      var diffY = e.touches[0].clientY - startY;
+
+      // 判斷是橫向滑動
+      if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 20) {
+        isSwiping = true;
+        // 視覺回饋：稍微位移
+        var move = diffX > 0 ? Math.min(diffX * 0.4, 30) : Math.max(diffX * 0.4, -30);
+        vinyl.style.transform = 'translateX(' + move + 'px) rotate(' + (move * 0.5) + 'deg) translateZ(0)';
+      }
+    }, { passive: true });
+
+    plinth.addEventListener('touchend', function (e) {
+      if (!startX || !startY) return;
+      var diffX = e.changedTouches[0].clientX - startX;
+      var diffY = e.changedTouches[0].clientY - startY;
+
+      vinyl.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
+      
+      // 恢復原位
+      vinyl.style.transform = 'translateX(0) rotate(0) translateZ(0)';
+
+      if (isSwiping && Math.abs(diffX) > 50 && Math.abs(diffY) < 80) {
+        if (diffX > 0 && currentIndex > 0) {
+          // 往右滑 -> 上一首
+          goToSong(currentIndex - 1);
+        } else if (diffX < 0 && currentIndex < playlist.songs.length - 1) {
+          // 往左滑 -> 下一首
+          goToSong(currentIndex + 1);
+        }
+      }
+
+      startX = 0;
+      startY = 0;
+      isSwiping = false;
+    }, { passive: true });
   }
 
   /* ============ 控制綁定 ============ */
