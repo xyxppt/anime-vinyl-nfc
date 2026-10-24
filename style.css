@@ -20,6 +20,7 @@ body {
   padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
+  touch-action: pan-y; /* 防止左右滑動時畫面跟著動 */
 }
 
 main {
@@ -94,18 +95,16 @@ main {
   pointer-events: none;
 }
 
-/* ===== 黑膠（優化旋轉效能） ===== */
+/* ===== 黑膠 ===== */
 .vinyl {
   position: absolute;
   inset: 15px;
   border-radius: 50%;
-  /* 使用較簡單的漸層，減少手機 GPU 負擔 */
   background: 
     repeating-radial-gradient(circle at 50% 50%, #111 0px, #111 1.5px, #1a1a1a 2px, #111 3px);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.07), inset 0 0 50px rgba(0,0,0,.95), 0 6px 20px rgba(0,0,0,.7);
   animation: spin 8s linear infinite;
   animation-play-state: paused;
-  /* 強制開啟 GPU 硬體加速，這是解決卡頓的關鍵 */
   will-change: transform;
   transform: translateZ(0);
 }
@@ -134,6 +133,9 @@ body.playing .vinyl { animation-play-state: running; }
   background-size: cover;
   background-position: center;
   box-shadow: 0 0 0 2px rgba(240,226,204,.22), 0 0 0 8px rgba(0,0,0,.55), inset 0 0 22px rgba(0,0,0,.55);
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .spindle {
@@ -194,10 +196,18 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .title { font-size: 22px; font-weight: 700; letter-spacing: .03em; line-height: 1.3; color: #fff6e6; text-shadow: 0 2px 12px rgba(255,180,90,.25); }
 .artist { font-size: 14px; color: rgba(240,226,204,.6); margin-top: 6px; }
 
-/* ===== 進度 ===== */
+/* ===== 進度 (使用 scaleX 優化) ===== */
 .progress { width: 100%; max-width: 330px; }
 .bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.11); overflow: hidden; }
-.fill { height: 100%; width: 0%; border-radius: 2px; background: linear-gradient(90deg, #b8913f, var(--brass-light)); }
+.fill { 
+  height: 100%; 
+  width: 100%; 
+  border-radius: 2px; 
+  background: linear-gradient(90deg, #b8913f, var(--brass-light)); 
+  transform-origin: left center;
+  transform: scaleX(0);
+  will-change: transform;
+}
 .times { display: flex; justify-content: space-between; font-size: 12px; margin-top: 8px; color: rgba(240,226,204,.5); font-variant-numeric: tabular-nums; }
 
 /* ===== 控制鈕 ===== */
@@ -242,7 +252,7 @@ body.playing .tonearm { transform: rotate(-31deg); }
   box-shadow: 0 10px 30px rgba(0,0,0,.6); z-index: 80;
 }
 
-/* ===== 歌單抽屜（移除毛玻璃提升效能） ===== */
+/* ===== 歌單抽屜 (移除毛玻璃提升效能) ===== */
 .drawer-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 50;
   display: flex; flex-direction: column; justify-content: flex-end;
@@ -283,7 +293,7 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .field input, .field textarea {
   background: rgba(255,255,255,.04); border: 1px solid rgba(217,181,106,.18);
   border-radius: 10px; padding: 14px 16px; color: var(--cream);
-  font-size: 16px; /* 防止手機端自動放大 */
+  font-size: 16px; /* 防手機自動放大 */
   font-family: inherit; outline: none; transition: border-color .15s;
 }
 .field input:focus, .field textarea:focus { border-color: rgba(217,181,106,.55); }
@@ -307,7 +317,6 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .icon-btn:disabled { opacity: .3; cursor: default; }
 .icon-btn.danger { color: #ff9b8f; border-color: rgba(255,155,143,.25); }
 
-/* 手機端將卡片改為上下排列，更適合輸入 */
 .song-body { display: flex; flex-direction: column; gap: 14px; }
 .cover-preview {
   width: 100%; height: 120px; border-radius: 10px; background-color: rgba(0,0,0,.4);
@@ -322,7 +331,7 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .field-sm input {
   background: rgba(255,255,255,.04); border: 1px solid rgba(217,181,106,.14);
   border-radius: 8px; padding: 12px 10px; color: var(--cream);
-  font-size: 16px; /* 防止放大 */
+  font-size: 16px; /* 防手機自動放大 */
   font-family: inherit; outline: none; min-width: 0;
 }
 .field-sm input:focus { border-color: rgba(217,181,106,.5); }
