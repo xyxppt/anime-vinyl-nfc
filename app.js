@@ -693,71 +693,23 @@
     });
   }
 
-  /* ============ 登入與 UI 更新 ============ */
-  function setupAuth() {
-    if (!window.firebaseAuth) return;
-    
-    authAPI = window.firebaseAuth;
-    dbAPI = window.firebaseDB;
-
-    // 處理跳轉回來的結果
-    authAPI.getRedirectResult(authAPI.auth).then(function(result) {
-      if (result && result.user) {
-        toast('登入成功！');
-      }
-    }).catch(function(error) {
-      console.warn('登入跳轉結果錯誤：', error);
-    });
-    
-    // 監聽登入狀態
-    authAPI.onAuthStateChanged(authAPI.auth, function(user) {
-      currentUser = user;
-      
-      var loginBtn = $('loginBtn');
-      var userProfile = $('userProfile');
-      var userAvatar = $('userAvatar');
-      var userName = $('userName');
-      var userEmail = $('userEmail');
-      var userDropdown = $('userDropdown');
-      
-      if (user) {
-        console.log('使用者已登入:', user.email);
-        // 切換到已登入 UI
-        if (loginBtn) loginBtn.style.display = 'none';
-        if (userProfile) userProfile.style.display = 'block';
-        
-        if (userAvatar) userAvatar.src = user.photoURL || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
-        if (userName) userName.textContent = user.displayName || '使用者';
-        if (userEmail) userEmail.textContent = user.email || '';
-        
-        // 載入雲端資料
-        loadDraftFromCloud();
-      } else {
-        console.log('使用者未登入');
-        // 切換到未登入 UI
-        if (loginBtn) loginBtn.style.display = 'flex';
-        if (userProfile) userProfile.style.display = 'none';
-        if (userDropdown) userDropdown.hidden = true;
-        
-        // 載入本機資料
-        loadDraft();
-        if (!state.songs.length) state.songs.push(newSong());
-        if ($('playlistName')) $('playlistName').value = state.name;
-        renderEditor();
-      }
-    });
-
-    // 登入按鈕 (自動判斷手機或電腦)
+  /* ============ 登入事件 (提前綁定) ============ */
+  function bindAuthControls() {
+    // 登入按鈕
     if ($('loginBtn')) $('loginBtn').addEventListener('click', function() {
+      if (!window.firebaseAuth) {
+        toast('登入模組載入中，請稍候再試...');
+        return;
+      }
+      var authAPI = window.firebaseAuth;
+      
       var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       
       if (isMobile) {
-        // 手機端用跳轉
         authAPI.signInWithRedirect(authAPI.auth, authAPI.provider).catch(function(error) {
           toast('無法跳轉登入：' + error.message);
         });
       } else {
-        // 電腦端用彈出視窗
         authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(function(error) {
           if (error.code === 'auth/popup-blocked') {
             toast('彈出視窗被阻擋，請允許後重試');
@@ -784,6 +736,9 @@
     if ($('switchAccountBtn')) $('switchAccountBtn').addEventListener('click', function(e) {
       e.stopPropagation();
       if ($('userDropdown')) $('userDropdown').hidden = true;
+      if (!window.firebaseAuth) return;
+      var authAPI = window.firebaseAuth;
+      
       authAPI.signOut(authAPI.auth).then(function() {
         authAPI.provider.setCustomParameters({ prompt: 'select_account' });
         var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -799,7 +754,8 @@
     if ($('logoutBtn')) $('logoutBtn').addEventListener('click', function(e) {
       e.stopPropagation();
       if ($('userDropdown')) $('userDropdown').hidden = true;
-      authAPI.signOut(authAPI.auth);
+      if (!window.firebaseAuth) return;
+      window.firebaseAuth.signOut(window.firebaseAuth.auth);
       toast('已登出');
     });
 
@@ -810,8 +766,11 @@
       
       if (!confirm('確定要刪除帳號嗎？這會永久刪除你的雲端歌單，且無法復原！')) return;
       
-      if (currentUser) {
+      if (currentUser && window.firebaseAuth && window.firebaseDB) {
+        var authAPI = window.firebaseAuth;
+        var dbAPI = window.firebaseDB;
         var uid = currentUser.uid;
+        
         if (dbAPI) {
           var docRef = dbAPI.doc(dbAPI.db, 'playlists', uid);
           dbAPI.deleteDoc(docRef).catch(console.error);
@@ -834,16 +793,69 @@
     });
   }
 
+  /* ============ Firebase 狀態監聽 ============ */
+  function setupAuthListener() {
+    if (!window.firebaseAuth) return;
+    var authAPI = window.firebaseAuth;
+    var dbAPI = window.firebaseDB;
+
+    // 處理跳轉回來的結果
+    authAPI.getRedirectResult(authAPI.auth).then(function(result) {
+      if (result && result.user) {
+        toast('登入成功！');
+      }
+    }).catch(function(error) {
+      console.warn('登入跳轉結果錯誤：', error);
+    });
+    
+    // 監聽登入狀態
+    authAPI.onAuthStateChanged(authAPI.auth, function(user) {
+      currentUser = user;
+      
+      var loginBtn = $('loginBtn');
+      var userProfile = $('userProfile');
+      var userAvatar = $('userAvatar');
+      var userName = $('userName');
+      var userEmail = $('userEmail');
+      var userDropdown = $('userDropdown');
+      
+      if (user) {
+        if (loginBtn) loginBtn.style.display = 'none';
+        if (userProfile) userProfile.style.display = 'block';
+        
+        if (userAvatar) userAvatar.src = user.photoURL || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
+        if (userName) userName.textContent = user.displayName || '使用者';
+        if (userEmail) userEmail.textContent = user.email || '';
+        
+        loadDraftFromCloud();
+      } else {
+        if (loginBtn) loginBtn.style.display = 'flex';
+        if (userProfile) userProfile.style.display = 'none';
+        if (userDropdown) userDropdown.hidden = true;
+        
+        loadDraft();
+        if (!state.songs.length) state.songs.push(newSong());
+        if ($('playlistName')) $('playlistName').value = state.name;
+        renderEditor();
+      }
+    });
+  }
+
   /* ============ 初始化 ============ */
   function init() {
-    // 1. 先綁定所有控制項與路由，確保畫面能顯示
+    // 1. 立刻綁定所有按鈕事件（包含登入）
     bindEditorControls();
     bindPlayControls();
+    bindAuthControls();
     route();
     window.addEventListener('hashchange', route);
 
-    // 2. 監聽 Firebase 準備好的事件
-    window.addEventListener('firebaseReady', setupAuth);
+    // 2. 檢查 Firebase 是否準備好
+    if (window.firebaseAuth) {
+      setupAuthListener();
+    } else {
+      window.addEventListener('firebaseReady', setupAuthListener);
+    }
   }
 
   if (document.readyState === 'loading') {
