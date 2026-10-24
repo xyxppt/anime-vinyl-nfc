@@ -140,7 +140,6 @@
       return;
     }
     
-    // 權限攔截：未登入不能進編輯頁
     if (!currentUser && hash.startsWith('#edit/')) {
       toast('請先登入才能編輯歌單');
       location.replace(location.pathname + location.search + '#home');
@@ -159,7 +158,6 @@
       return;
     }
     
-    // 預設回首頁
     showHomeView();
   }
 
@@ -183,7 +181,7 @@
     window.scrollTo(0, 0);
   }
 
-  /* ============ 首頁視圖 (訪客/會員切換) ============ */
+  /* ============ 首頁視圖 ============ */
   function showHomeView() {
     if (currentUser) {
       if (!isDirty) loadDraft();
@@ -372,6 +370,7 @@
   var progressTimer = null;
   var tapTimer = null;
   var lastSec = -1;
+  var currentPlayCode = null;
 
   function packPayload(pl) {
     var mini = {
@@ -449,6 +448,7 @@
   function showPlayView(code, isPreview) {
     try {
       playlist = decodePlaylist(code);
+      currentPlayCode = code;
     } catch (e) {
       showError('無法讀取歌單：' + e.message);
       return;
@@ -467,6 +467,11 @@
     
     if ($('backLink')) {
       $('backLink').hidden = !currentUser;
+    }
+    
+    // 只有在預覽模式且已登入時，才顯示刪除按鈕
+    if ($('deletePlayBtn')) {
+      $('deletePlayBtn').style.display = (isPreview && currentUser) ? 'grid' : 'none';
     }
 
     currentIndex = 0;
@@ -821,6 +826,125 @@
     });
   }
 
+  /* ============ 刪除功能與動畫 ============ */
+  var deleteTargetId = null;
+  var deleteSource = null; // 'edit' 或 'play'
+
+  function openDeleteModal(id, source) {
+    deleteTargetId = id;
+    deleteSource = source;
+    var modal = $('deleteModal');
+    if (modal) {
+      modal.hidden = false;
+      // 觸發 transition
+      requestAnimationFrame(() => modal.classList.add('show'));
+    }
+  }
+
+  function closeDeleteModal() {
+    var modal = $('deleteModal');
+    if (modal) {
+      modal.classList.remove('show');
+      setTimeout(() => { modal.hidden = true; }, 300);
+    }
+    deleteTargetId = null;
+    deleteSource = null;
+  }
+
+  function executeDelete() {
+    if (!deleteTargetId) return;
+    
+    var targetId = deleteTargetId;
+    var source = deleteSource;
+    closeDeleteModal();
+
+    // 準備動畫
+    var overlay = $('eatOverlay');
+    var monster = $('monster');
+    var targetEl = source === 'edit' ? $('editWrap') : $('playWrap');
+
+    if (overlay && targetEl && monster) {
+      overlay.hidden = false;
+      requestAnimationFrame(() => overlay.classList.add('show'));
+
+      // 1. 張嘴
+      setTimeout(() => {
+        monster.classList.add('open-mouth');
+      }, 300);
+
+      // 2. 飛入嘴裡
+      setTimeout(() => {
+        targetEl.classList.add('being-eaten');
+        stopPlayback(); // 如果在播放頁，先停止音樂
+      }, 600);
+
+      // 3. 閉嘴咀嚼，然後執行實際刪除
+      setTimeout(() => {
+        monster.classList.remove('open-mouth');
+        
+        // 實際刪除邏輯
+        var idx = state.playlists.findIndex(p => p.id === targetId);
+        if (idx !== -1) {
+          state.playlists.splice(idx, 1);
+          saveDraft();
+          if (currentUser) saveDraftToCloud(true);
+        }
+
+        // 4. 動畫結束，返回首頁
+        setTimeout(() => {
+          overlay.classList.remove('show');
+          setTimeout(() => { 
+            overlay.hidden = true; 
+            targetEl.classList.remove('being-eaten'); // 重置樣式
+          }, 300);
+          
+          location.hash = '#home';
+        }, 800);
+
+      }, 1400);
+    } else {
+      // 如果動畫失敗，直接執行刪除
+      var idx = state.playlists.findIndex(p => p.id === targetId);
+      if (idx !== -1) {
+        state.playlists.splice(idx, 1);
+        saveDraft();
+        if (currentUser) saveDraftToCloud(true);
+      }
+      location.hash = '#home';
+    }
+  }
+
+  function bindDeleteControls() {
+    // 編輯頁刪除按鈕
+    if ($('deleteEditBtn')) {
+      $('deleteEditBtn').addEventListener('click', function() {
+        if (currentPlaylistId) openDeleteModal(currentPlaylistId, 'edit');
+      });
+    }
+
+    // 播放頁刪除按鈕
+    if ($('deletePlayBtn')) {
+      $('deletePlayBtn').addEventListener('click', function() {
+        // 從當前網址找出對應的歌單
+        if (currentUser && state.playlists.length > 0) {
+          // 這裡比較麻煩，因為播放頁可能是從分享連結進來的
+          // 我們只能刪除當前使用者的歌單，且名稱必須相符
+          // 最簡單的方法：如果這首歌單在 state.playlists 裡，就允許刪除
+          var matchedPl = state.playlists.find(p => p.name === playlist.name);
+          if (matchedPl) {
+            openDeleteModal(matchedPl.id, 'play');
+          } else {
+            toast('找不到此歌單，可能不是你的歌單');
+          }
+        }
+      });
+    }
+
+    // Modal 按鈕
+    if ($('cancelDeleteBtn')) $('cancelDeleteBtn').addEventListener('click', closeDeleteModal);
+    if ($('confirmDeleteBtn')) $('confirmDeleteBtn').addEventListener('click', executeDelete);
+  }
+
   /* ============ 登入與 UI 切換 ============ */
   function triggerLogin() {
     if (!window.firebaseAuth) {
@@ -846,7 +970,6 @@
     if (!window.firebaseAuth) return;
     window.firebaseAuth.signOut(window.firebaseAuth.auth);
     toast('已登出');
-    // 登出後強制回到首頁
     location.hash = '#home';
   }
 
@@ -887,7 +1010,6 @@
         $('backLink').hidden = true;
       }
       
-      // 登出或未登入時，清空狀態並重新整理畫面
       state = { playlists: [] };
       renderPlaylistGrid();
     }
@@ -964,8 +1086,9 @@
     bindEditorControls();
     bindPlayControls();
     bindAuthControls();
+    bindDeleteControls(); // 綁定刪除與動畫
     
-    loadDraft(); // 先載入本機資料，避免畫面空白
+    loadDraft();
     
     route();
     window.addEventListener('hashchange', route);
