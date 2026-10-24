@@ -915,9 +915,7 @@
     if (swipeBound || !vinylPlinth || !vinyl) return;
     swipeBound = true;
 
-
     var startX = 0, startY = 0, isSwiping = false;
-
 
     vinylPlinth.addEventListener('touchstart', function (e) {
       startX = e.touches[0].clientX;
@@ -1290,9 +1288,27 @@
     refreshUI();
 
     var modal = $('themeModal');
-    $('themeBtn').addEventListener('click', function () { refreshUI(); modal.hidden = false; });
-    $('themeDone').addEventListener('click', function () { modal.hidden = true; });
-    modal.addEventListener('click', function (e) { if (e.target === modal) modal.hidden = true; });
+    
+    function openThemeModal() {
+      refreshUI();
+      if (modal) {
+        modal.hidden = false;
+        requestAnimationFrame(() => modal.classList.add('show'));
+      }
+    }
+
+    function closeThemeModal() {
+      if (modal) {
+        modal.classList.remove('show');
+        setTimeout(() => { modal.hidden = true; }, 300);
+      }
+    }
+
+    $('themeBtn').addEventListener('click', openThemeModal);
+    $('themeDone').addEventListener('click', closeThemeModal);
+    modal.addEventListener('click', function (e) { 
+      if (e.target === modal) closeThemeModal(); 
+    });
   }
 
   function bindEditorControls() {
@@ -1536,7 +1552,10 @@
     ['sleepBtn', 'themeBtn'].forEach(function (id) { if ($(id)) $(id).hidden = !user; });
     if (!user) {
       setSleep(0);
-      if ($('themeModal')) $('themeModal').hidden = true;
+      if ($('themeModal')) {
+        $('themeModal').classList.remove('show');
+        $('themeModal').hidden = true;
+      }
     }
     applyTheme();
     
