@@ -147,6 +147,7 @@
   function route() {
     var hash = location.hash || '';
 
+    // 如果要切換到播放或預覽頁面
     if (hash.indexOf('#play/') === 0) {
       showPlayView(hash.slice(6), false);
       return;
@@ -155,11 +156,30 @@
       showPlayView(hash.slice(9), true);
       return;
     }
+
+    // 以下為切換回編輯頁面的邏輯
+    stopPlayback(); // 強制停止音樂
+
     if (hash === '#play' || hash === '#preview') {
       location.replace(location.pathname + location.search + '#edit');
       return;
     }
     showEditView();
+  }
+
+  // 徹底停止播放器的函式
+  function stopPlayback() {
+    if (player && player.stopVideo) {
+      try {
+        player.stopVideo();
+      } catch (e) {}
+    }
+    document.body.classList.remove('playing');
+    $('tapPrompt').hidden = true;
+    stopProgress();
+    $('fill').style.width = '0%';
+    $('cur').textContent = '0:00';
+    $('dur').textContent = '0:00';
   }
 
   function show(id) {
