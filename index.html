@@ -16,8 +16,6 @@
       <a class="back-link" id="backLink" href="#edit" hidden>← 編輯</a>
       <button class="drawer-toggle" id="listToggle" type="button">☰ 歌單</button>
     </div>
-
-    <!-- 唱盤區塊 -->
     <div class="plinth-wrapper">
       <div class="nav-arrow left" id="prevArrow">❮</div>
       <div class="plinth" id="vinylPlinth">
@@ -34,14 +32,11 @@
       </div>
       <div class="nav-arrow right" id="nextArrow">❯</div>
     </div>
-
     <div class="meta">
       <p class="anime" id="anime"></p>
       <h1 class="title" id="title"></h1>
       <p class="artist" id="artist"></p>
     </div>
-
-    <!-- 進度條區塊 -->
     <div class="progress-area">
       <div class="progress">
         <div class="bar"><div class="fill" id="fill"></div></div>
@@ -51,15 +46,12 @@
         </div>
       </div>
     </div>
-
     <div class="controls">
       <button class="btn" id="prevBtn" type="button" aria-label="上一首">⏮</button>
       <button class="btn primary" id="playBtn" type="button" aria-label="播放／暫停">▶</button>
       <button class="btn" id="nextBtn" type="button" aria-label="下一首">⏭</button>
     </div>
   </div>
-
-  <!-- 歌單抽屜 -->
   <div class="drawer-overlay" id="playlistDrawer" hidden>
     <div class="drawer">
       <div class="drawer-head">
@@ -122,23 +114,15 @@
   </div>
 </main>
 
-<!-- YouTube 隱藏播放器 -->
 <div id="ytHost" aria-hidden="true"></div>
-
-<!-- 點擊播放提示 -->
-<div class="tap-prompt" id="tapPrompt" hidden>
-  <span>▶ 點一下開始播放</span>
-</div>
-
-<!-- Toast -->
+<div class="tap-prompt" id="tapPrompt" hidden><span>▶ 點一下開始播放</span></div>
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
 
-<!-- Firebase 初始化 (已填入你的設定) -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -151,15 +135,19 @@
     measurementId: "G-WSYF3Z0BPE"
   };
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  const provider = new GoogleAuthProvider();
-
-  // 將 Firebase 實例與方法掛載到 window，供 app.js 使用
-  window.firebaseAuth = { auth, provider, signInWithPopup, signOut, onAuthStateChanged };
-  window.firebaseDB = { db, doc, setDoc, getDoc };
+  try {
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
+    window.firebaseAuth = { auth, provider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged };
+    window.firebaseDB = { db, doc, setDoc, getDoc };
+  } catch (e) {
+    console.error("Firebase 載入失敗", e);
+  }
 </script>
-<script src="app.js"></script>
+
+<!-- 加上 defer 確保 DOM 載入完才執行 -->
+<script src="app.js" defer></script>
 </body>
 </html>
