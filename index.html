@@ -11,14 +11,15 @@
 
 <!-- ============ 播放視圖 ============ -->
 <main id="viewPlay" hidden>
-  <div class="play-wrap">
+  <div class="play-wrap" id="playWrap">
     <div class="top-bar">
-      <!-- 左側返回 (已登入才顯示) -->
       <a class="back-link" id="backLink" href="#home" hidden>← 首頁</a>
       
-      <!-- 右側按鈕群 -->
       <div class="play-top-actions">
         <button class="drawer-toggle" id="listToggle" type="button">☰ 歌單</button>
+        <!-- 播放頁的刪除按鈕 (僅在預覽且登入時顯示) -->
+        <button class="icon-btn danger" id="deletePlayBtn" type="button" style="margin-left: 8px; display: none;" title="刪除歌單">🗑️</button>
+        
         <div class="user-area" style="margin-left: 10px;">
           <button id="loginBtnPlay" class="btn-google" style="padding: 6px 12px; font-size: 12px;">登入</button>
           <div id="userProfilePlay" class="user-profile" hidden>
@@ -84,8 +85,6 @@
 <!-- ============ 首頁 (包含歡迎畫面與會員總覽) ============ -->
 <main id="viewHome" hidden>
   <div class="edit-wrap">
-    
-    <!-- 頂部導航列 -->
     <div class="edit-topbar">
       <div class="edit-header-left">
         <h1>Anime Vinyl</h1>
@@ -105,7 +104,6 @@
       </div>
     </div>
 
-    <!-- 未登入：歡迎畫面 -->
     <div id="guestHome" hidden>
       <div class="guest-hero">
         <div class="glowing-vinyl">
@@ -121,20 +119,18 @@
       </button>
     </div>
 
-    <!-- 已登入：歌單列表 -->
     <div id="memberHome" hidden>
       <div class="list-actions">
         <button class="btn-block primary" id="createPlaylistBtn" type="button">＋ 建立新歌單</button>
       </div>
       <div class="playlist-grid" id="playlistGrid"></div>
     </div>
-
   </div>
 </main>
 
 <!-- ============ 編輯視圖 ============ -->
 <main id="viewEdit" hidden>
-  <div class="edit-wrap">
+  <div class="edit-wrap" id="editWrap">
     <div class="edit-topbar">
       <div class="edit-header-left">
         <a href="#home" class="back-link" style="position:static; padding: 0;">← 首頁</a>
@@ -142,6 +138,7 @@
       <div class="edit-header-right">
         <span id="saveStatus" class="save-status"></span>
         <button class="btn-save" id="saveBtn">儲存</button>
+        <button class="icon-btn danger" id="deleteEditBtn" type="button" title="刪除歌單" style="margin-left: 8px;">🗑️</button>
       </div>
     </div>
 
@@ -177,6 +174,27 @@
     <a class="back" href="#home">← 回到首頁</a>
   </div>
 </main>
+
+<!-- ============ 自訂確認彈窗 (Modal) ============ -->
+<div class="modal-overlay" id="deleteModal" hidden>
+  <div class="modal-content">
+    <h3>刪除歌單</h3>
+    <p>執行後此歌單將整個刪除無法復原，<br>確定要刪除嗎？</p>
+    <div class="modal-actions">
+      <button class="btn-block ghost" id="cancelDeleteBtn">取消</button>
+      <button class="btn-block danger" id="confirmDeleteBtn">確定刪除</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 吃掉動畫容器 ============ -->
+<div class="eat-animation-overlay" id="eatOverlay" hidden>
+  <div class="monster" id="monster">
+    <div class="monster-eye left"></div>
+    <div class="monster-eye right"></div>
+    <div class="monster-mouth" id="monsterMouth"></div>
+  </div>
+</div>
 
 <div id="ytHost" aria-hidden="true"></div>
 <div class="tap-prompt" id="tapPrompt" hidden><span>▶ 點一下開始播放</span></div>
