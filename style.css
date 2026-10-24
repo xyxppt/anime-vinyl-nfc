@@ -310,3 +310,45 @@ body.play-mode .plinth-wrapper { width: min(85vw, 340px, 36dvh); margin-top: 0; 
 .eq i { flex: 1; max-width: 6px; height: 100%; background: var(--accent); border-radius: 2px; opacity: .85; transform-origin: bottom; transform: scaleY(.12); animation: eqbar var(--d, 1s) ease-in-out infinite alternate; animation-delay: var(--dl, 0s); animation-play-state: paused; box-shadow: 0 0 6px var(--accent-dim); }
 body.playing .eq i { animation-play-state: running; }
 @keyframes eqbar { from { transform: scaleY(.12); } to { transform: scaleY(var(--h, 1)); } }
+
+/* ===== 互動特效 ===== */
+.btn, .btn-block, .icon-btn, .btn-save, .btn-google, .drawer-toggle, .drawer-close, .drawer-item, .playlist-card, .dropdown-item { position: relative; overflow: hidden; }
+.nav-arrow { overflow: hidden; }
+.ripple { position: absolute; border-radius: 50%; pointer-events: none; background: rgba(255,255,255,.35); transform: scale(0); animation: ripple .6s ease-out forwards; }
+.btn.primary .ripple, .btn-block.primary .ripple, .btn-save .ripple { background: rgba(0,0,0,.22); }
+@keyframes ripple { to { transform: scale(1); opacity: 0; } }
+
+/* 播放中的主按鈕呼吸光暈 */
+body.playing .btn.primary { animation: glowpulse 1.8s ease-in-out infinite; }
+@keyframes glowpulse { 0%, 100% { box-shadow: 0 0 20px var(--accent-dim), inset 0 1px 2px rgba(255,255,255,.5); } 50% { box-shadow: 0 0 38px 8px rgba(0,229,255,.45), inset 0 1px 2px rgba(255,255,255,.5); } }
+
+/* 主要按鈕的流光 */
+.btn-block.primary::before, .btn-save::before { content: ""; position: absolute; top: 0; left: -60%; width: 40%; height: 100%; background: linear-gradient(105deg, transparent, rgba(255,255,255,.5), transparent); transform: skewX(-20deg); pointer-events: none; }
+.btn-block.primary:active::before, .btn-save:active::before { animation: sweep .6s ease-out; }
+@keyframes sweep { to { left: 130%; } }
+
+button.nav-arrow { transition: color .2s, opacity .2s, transform .15s; }
+.nav-arrow:active { transform: translateY(-50%) scale(1.35); }
+.plinth { transition: transform .2s; }
+.plinth:active { transform: scale(.985); }
+.playlist-card .pc-arrow { transition: transform .2s, color .2s; }
+.song-card { transition: border-color .2s, box-shadow .2s; }
+.song-card:focus-within { border-color: var(--accent-dim); box-shadow: 0 0 22px rgba(0,229,255,.07); }
+.field input:focus, .field-sm input:focus, .field textarea:focus { box-shadow: 0 0 0 3px var(--accent-dim); }
+.toast { animation: toastIn .3s cubic-bezier(.2,.8,.2,1); }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 16px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.play-wrap, .edit-wrap { animation: viewIn .4s cubic-bezier(.2,.8,.2,1); }
+@keyframes viewIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+@media (hover: hover) {
+  .btn:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 8px 20px rgba(0,0,0,.5), 0 0 16px var(--accent-dim); }
+  .btn:active:not(:disabled) { transform: scale(.9); }
+  .btn-block:hover { border-color: var(--accent); box-shadow: 0 0 18px var(--accent-dim); }
+  .btn-block.primary:hover::before, .btn-save:hover::before { animation: sweep .7s ease-out; }
+  .icon-btn:hover:not(:disabled) { border-color: var(--accent); background: rgba(255,255,255,.08); }
+  .icon-btn.danger:hover:not(:disabled) { border-color: var(--danger); box-shadow: 0 0 12px var(--danger-dim); }
+  .playlist-card:hover { border-color: var(--accent-dim); background: rgba(0,229,255,.04); }
+  .playlist-card:hover .pc-arrow { transform: translateX(4px); color: var(--accent); }
+  .drawer-item:hover { background: rgba(255,255,255,.05); }
+  .nav-arrow:hover { color: var(--accent); }
+}
