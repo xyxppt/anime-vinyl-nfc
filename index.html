@@ -17,7 +17,6 @@
       
       <div class="play-top-actions">
         <button class="drawer-toggle" id="listToggle" type="button">☰ 歌單</button>
-        <!-- 播放頁的刪除按鈕 (僅在預覽且登入時顯示) -->
         <button class="icon-btn danger" id="deletePlayBtn" type="button" style="margin-left: 8px; display: none;" title="刪除歌單">🗑️</button>
         
         <div class="user-area" style="margin-left: 10px;">
@@ -204,7 +203,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyB1r6uz7hRPjZz3Ha5YJVRG28vt0B31MVo",
@@ -222,8 +221,9 @@
     const db = getFirestore(app);
     const provider = new GoogleAuthProvider();
     
+    // 加入了 onSnapshot
     window.firebaseAuth = { auth, provider, signInWithPopup, signOut, onAuthStateChanged, deleteUser };
-    window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc };
+    window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc, onSnapshot };
     
     window.dispatchEvent(new Event('firebaseReady'));
   } catch (e) {
