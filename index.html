@@ -66,22 +66,39 @@
 <!-- ============ 編輯視圖 ============ -->
 <main id="viewEdit" hidden>
   <div class="edit-wrap">
-    <header class="edit-header">
-      <h1>Anime Vinyl</h1>
-      <p>製作你的黑膠歌單</p>
-    </header>
-
-    <!-- 登入登出區塊 -->
-    <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 8px;">
-      <button id="loginBtn" class="btn-block" style="padding: 10px; width: auto; font-size: 14px; display: flex; align-items: center; gap: 8px;">
-        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-        Google 登入
-      </button>
-      <button id="logoutBtn" class="btn-block ghost" style="padding: 10px; width: auto; font-size: 14px; display: none;">登出</button>
-      <span id="userInfo" style="font-size: 13px; color: var(--accent); display: none;"></span>
+    
+    <!-- 頂部導航列 (包含標題與帳號頭像) -->
+    <div class="edit-topbar">
+      <div class="edit-header-left">
+        <h1>Anime Vinyl</h1>
+      </div>
+      
+      <div class="user-area">
+        <!-- 未登入狀態 -->
+        <button id="loginBtn" class="btn-google">
+          <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          登入
+        </button>
+        
+        <!-- 已登入狀態 -->
+        <div id="userProfile" class="user-profile" hidden>
+          <img id="userAvatar" src="" alt="User">
+          <div id="userDropdown" class="user-dropdown" hidden>
+            <div class="dropdown-header">
+              <span id="userName">載入中...</span>
+              <span id="userEmail" class="text-muted">...</span>
+            </div>
+            <button id="switchAccountBtn" class="dropdown-item">切換帳號</button>
+            <button id="logoutBtn" class="dropdown-item">登出</button>
+            <button id="deleteAccountBtn" class="dropdown-item danger">刪除帳號</button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <label class="field">
+    <p class="edit-subtitle">製作你的黑膠歌單</p>
+
+    <label class="field" style="margin-top: 10px;">
       <span>歌單名稱</span>
       <input id="playlistName" type="text" maxlength="40" placeholder="我的動漫收藏">
     </label>
@@ -119,35 +136,6 @@
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
-
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyB1r6uz7hRPjZz3Ha5YJVRG28vt0B31MVo",
-    authDomain: "musicddjason.firebaseapp.com",
-    projectId: "musicddjason",
-    storageBucket: "musicddjason.firebasestorage.app",
-    messagingSenderId: "593507167093",
-    appId: "1:593507167093:web:c02484cc34d5d20432c13c",
-    measurementId: "G-WSYF3Z0BPE"
-  };
-
-  try {
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const provider = new GoogleAuthProvider();
-    window.firebaseAuth = { auth, provider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged };
-    window.firebaseDB = { db, doc, setDoc, getDoc };
-  } catch (e) {
-    console.error("Firebase 載入失敗", e);
-  }
-</script>
-
-<!-- 加上 defer 確保 DOM 載入完才執行 -->
-<script src="app.js" defer></script>
+<script src="app.js"></script>
 </body>
 </html>
