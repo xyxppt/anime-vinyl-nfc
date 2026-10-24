@@ -1033,6 +1033,24 @@
     });
   }
 
+  function bindFullscreen() {
+    var btn = $('fsBtn'), de = document.documentElement;
+    var req = de.requestFullscreen || de.webkitRequestFullscreen;
+    var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone;
+    if (!btn || !req || standalone) return;
+    btn.hidden = false;
+    btn.style.marginRight = '8px';
+    btn.addEventListener('click', function () {
+      var on = document.fullscreenElement || document.webkitFullscreenElement;
+      var p = on ? (document.exitFullscreen || document.webkitExitFullscreen).call(document)
+                 : req.call(de);
+      if (p && p.catch) p.catch(function () { toast('此瀏覽器不支援全螢幕'); });
+    });
+    function sync() { btn.textContent = (document.fullscreenElement || document.webkitFullscreenElement) ? '✕' : '⛶'; }
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+  }
+
   function bindEditorControls() {
     if ($('createPlaylistBtn')) $('createPlaylistBtn').addEventListener('click', function () {
       if (!currentUser) return;
@@ -1412,6 +1430,7 @@
     buildEq();
     bindZoomLock();
     bindFx();
+    bindFullscreen();
     
     loadDraft();
     
