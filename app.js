@@ -3,6 +3,11 @@
 
   var $ = function (id) { return document.getElementById(id); };
 
+  /* ============ Firebase 狀態 ============ */
+  var currentUser = null;
+  var authAPI = window.firebaseAuth;
+  var dbAPI = window.firebaseDB;
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -63,7 +68,50 @@
   }
 
   function saveDraft() {
+    // 1. 先存本機
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+    // 2. 如果有登入，同步到雲端
+    if (currentUser && dbAPI) {
+      saveDraftToCloud();
+    }
+  }
+
+  async function saveDraftToCloud() {
+    if (!currentUser || !dbAPI) return;
+    try {
+      var docRef = dbAPI.doc(dbAPI.db, 'playlists', currentUser.uid);
+      await dbAPI.setDoc(docRef, {
+        name: state.name,
+        songs: state.songs,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (e) {
+      console.error('雲端儲存失敗', e);
+    }
+  }
+
+  async function loadDraftFromCloud() {
+    if (!currentUser || !dbAPI) return;
+    try {
+      var docRef = dbAPI.doc(dbAPI.db, 'playlists', currentUser.uid);
+      var docSnap = await dbAPI.getDoc(docRef);
+      if (docSnap.exists()) {
+        var data = docSnap.data();
+        if (data && Array.isArray(data.songs)) {
+          state.name = data.name || '我的黑膠歌單';
+          state.songs = data.songs;
+        }
+      } else {
+        // 如果雲端沒資料，把本機的存上去
+        await saveDraftToCloud();
+      }
+      $('playlistName').value = state.name;
+      renderEditor();
+      toast('☁️ 雲端歌單已載入');
+    } catch (e) {
+      console.error('雲端載入失敗', e);
+      toast('雲端載入失敗，使用本機資料');
+    }
   }
 
   /* ============ 歌單編碼 / 解碼 ============ */
@@ -127,7 +175,7 @@
 
     if (type === 'L') {
       if (!window.LZString || !LZString.decompressFromEncodedURIComponent) {
-        throw new Error('缺少解壓縮元件，請確認網路連線後重新整理');
+        throw new Error('缺少解壓縮元件');
       }
       json = LZString.decompressFromEncodedURIComponent(body.replace(/\./g, '+'));
     } else if (type === 'B') {
@@ -183,16 +231,22 @@
 
   /* ============ 編輯視圖 ============ */
   function showEditView() {
-    loadDraft();
-    if (!state.songs.length) state.songs.push(newSong());
-    $('playlistName').value = state.name;
-    renderEditor();
+    if (!currentUser) {
+      loadDraft();
+      if (!state.songs.length) state.songs.push(newSong());
+      $('playlistName').value = state.name;
+      renderEditor();
+    }
     show('viewEdit');
   }
 
   function renderEditor() {
     var list = $('songEditorList');
+    if (!list) return;
     list.innerHTML = '';
+    if (!state.songs.length) {
+      state.songs.push(newSong());
+    }
     state.songs.forEach(function (song, index) {
       list.appendChild(buildSongCard(song, index));
     });
@@ -500,7 +554,7 @@
     show('viewError');
   }
 
-  /* ============ 滑動手勢切歌 ============ */
+  /* ============ 手勢與控制 ============ */
   function bindSwipeGestures() {
     var vinylPlinth = $('vinylPlinth');
     var vinyl = document.querySelector('.vinyl');
@@ -554,7 +608,6 @@
     }, { passive: true });
   }
 
-  /* ============ 控制綁定 ============ */
   function bindPlayControls() {
     $('playBtn').addEventListener('click', function () {
       if (!player || !player.playVideo) return;
@@ -637,9 +690,53 @@
     });
   }
 
+  /* ============ 登入與初始化 ============ */
+  function setupAuth() {
+    if (!authAPI) return;
+    
+    authAPI.onAuthStateChanged(authAPI.auth, function(user) {
+      currentUser = user;
+      var loginBtn = $('loginBtn');
+      var logoutBtn = $('logoutBtn');
+      var userInfo = $('userInfo');
+      
+      if (user) {
+        loginBtn.style.display = 'none';
+        logoutBtn.style.display = 'inline-block';
+        userInfo.style.display = 'inline-block';
+        userInfo.textContent = '👤 ' + (user.displayName || user.email).split(' ')[0];
+        
+        // 載入雲端資料
+        loadDraftFromCloud();
+      } else {
+        loginBtn.style.display = 'inline-block';
+        logoutBtn.style.display = 'none';
+        userInfo.style.display = 'none';
+        
+        // 載入本機資料
+        loadDraft();
+        if (!state.songs.length) state.songs.push(newSong());
+        $('playlistName').value = state.name;
+        renderEditor();
+      }
+    });
+
+    $('loginBtn').addEventListener('click', function() {
+      authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(function(error) {
+        toast('登入失敗：' + error.message);
+      });
+    });
+
+    $('logoutBtn').addEventListener('click', function() {
+      authAPI.signOut(authAPI.auth);
+      toast('已登出');
+    });
+  }
+
   function init() {
     bindEditorControls();
     bindPlayControls();
+    setupAuth(); // 啟動 Firebase 登入監聽
     route();
     window.addEventListener('hashchange', route);
   }
