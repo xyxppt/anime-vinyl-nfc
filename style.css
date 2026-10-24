@@ -9,6 +9,7 @@
   --text-main: #e2e8f0;
   --text-muted: #64748b;
   --danger: #ff4757;
+  --danger-dim: rgba(255, 71, 87, 0.2);
 }
 
 [hidden] { display: none !important; }
@@ -27,7 +28,7 @@ main { width: 100%; display: flex; justify-content: center; }
 
 /* ===== 播放視圖 ===== */
 #viewPlay { flex-direction: column; align-items: center; justify-content: flex-start; }
-.play-wrap { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.play-wrap { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 20px; transition: transform 0.6s cubic-bezier(0.5, 0, 0.5, 1), opacity 0.6s; }
 .top-bar { width: 100%; display: flex; align-items: center; justify-content: space-between; position: relative; min-height: 40px; }
 .back-link { color: var(--text-muted); text-decoration: none; font-size: 14px; padding: 8px 12px 8px 0; border-radius: 8px; }
 .play-top-actions { display: flex; align-items: center; }
@@ -96,7 +97,7 @@ body.playing .tonearm { transform: rotate(-31deg); }
 
 /* ===== 首頁與編輯視圖通用 ===== */
 #viewHome, #viewEdit { flex-direction: column; align-items: center; justify-content: flex-start; }
-.edit-wrap { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
+.edit-wrap { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; transition: transform 0.6s cubic-bezier(0.5, 0, 0.5, 1), opacity 0.6s; }
 
 .edit-topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; position: relative; }
 .edit-header-left h1 { font-size: 24px; letter-spacing: .04em; color: #fff; }
@@ -186,7 +187,8 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .song-card-head { display: flex; justify-content: space-between; align-items: center; }
 .song-num { font-size: 13px; font-weight: 700; color: var(--accent); padding: 4px 12px; background: var(--accent-dim); border-radius: 999px; }
 .song-card-tools { display: flex; gap: 8px; }
-.icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); color: var(--text-main); font-size: 14px; cursor: pointer; display: grid; place-items: center; font-family: inherit; }
+.icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); color: var(--text-main); font-size: 14px; cursor: pointer; display: grid; place-items: center; font-family: inherit; transition: background .15s; }
+.icon-btn:active { background: rgba(255,255,255,.1); }
 .icon-btn:disabled { opacity: .3; cursor: default; }
 .icon-btn.danger { color: #ff6b6b; border-color: rgba(255,107,107,.2); }
 .song-body { display: flex; flex-direction: column; gap: 14px; }
@@ -202,6 +204,7 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .btn-block:active { transform: scale(.98); }
 .btn-block.primary { background: var(--accent); color: var(--bg-dark); border-color: var(--accent); box-shadow: 0 0 15px var(--accent-dim); }
 .btn-block.ghost { background: transparent; border-style: dashed; color: var(--text-muted); }
+.btn-block.danger { background: var(--danger); color: #fff; border-color: var(--danger); box-shadow: 0 0 15px var(--danger-dim); }
 .actions { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
 .share-box { background: rgba(0, 229, 255, 0.03); border: 1px solid var(--accent-dim); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .share-info { font-size: 12px; line-height: 1.6; color: var(--text-muted); }
@@ -211,3 +214,66 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .err { font-size: 16px; line-height: 1.8; color: #ff9e9e; margin-bottom: 24px; white-space: pre-wrap; }
 .back { font-size: 15px; color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); padding-bottom: 2px; }
 #ytHost { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
+
+/* ===== 自訂彈窗 (Modal) ===== */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px);
+  z-index: 200; display: flex; justify-content: center; align-items: center;
+  opacity: 0; transition: opacity 0.3s;
+}
+.modal-overlay.show { opacity: 1; }
+.modal-content {
+  background: var(--panel); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px; padding: 24px; width: 90%; max-width: 320px;
+  transform: translateY(20px); transition: transform 0.3s;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.9);
+}
+.modal-overlay.show .modal-content { transform: translateY(0); }
+.modal-content h3 { color: #fff; font-size: 18px; margin-bottom: 12px; text-align: center; }
+.modal-content p { color: var(--text-muted); font-size: 14px; line-height: 1.6; text-align: center; margin-bottom: 24px; }
+.modal-actions { display: flex; gap: 12px; }
+.modal-actions .btn-block { padding: 12px; font-size: 15px; }
+
+/* ===== 吃掉動畫容器 ===== */
+.eat-animation-overlay {
+  position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.9);
+  display: flex; justify-content: center; align-items: center;
+  opacity: 0; transition: opacity 0.3s;
+}
+.eat-animation-overlay.show { opacity: 1; }
+
+/* 怪獸本體 */
+.monster {
+  width: 120px; height: 120px; background: var(--accent); border-radius: 50%;
+  position: relative; display: flex; justify-content: center; align-items: center;
+  box-shadow: 0 0 50px var(--accent), inset 0 -10px 20px rgba(0,0,0,0.3);
+  transform: scale(0); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.eat-animation-overlay.show .monster { transform: scale(1); }
+
+/* 眼睛 */
+.monster-eye {
+  width: 16px; height: 16px; background: #000; border-radius: 50%;
+  position: absolute; top: 35px;
+}
+.monster-eye.left { left: 28px; }
+.monster-eye.right { right: 28px; }
+
+/* 嘴巴 (預設閉合) */
+.monster-mouth {
+  width: 40px; height: 10px; background: #000; border-radius: 10px;
+  position: absolute; bottom: 35px;
+  transition: all 0.2s;
+}
+
+/* 張嘴狀態 */
+.monster.open-mouth .monster-mouth {
+  height: 40px; width: 60px; border-radius: 0 0 30px 30px; bottom: 20px;
+}
+
+/* 被吃的元素動畫 */
+.being-eaten {
+  transform: scale(0.1) translateY(-100px) rotate(20deg) !important;
+  opacity: 0;
+  transition: all 0.6s cubic-bezier(0.5, 0, 0.5, 1) !important;
+}
