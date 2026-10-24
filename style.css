@@ -399,3 +399,14 @@ body[data-label="gradient"] .vinyl-label { background: conic-gradient(from 0deg,
 .picker-row span { min-width: 34px; }
 .picker-row input[type="color"] { width: 46px; height: 30px; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: none; padding: 2px; cursor: pointer; }
 .picker-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+
+.pill[hidden] { display: none; }
+/* 矮螢幕手機:縮小版面,避免下方被切掉 */
+@media (max-height: 740px) {
+  body.play-mode .eq { display: none; }
+  body.play-mode .plinth-wrapper { width: min(85vw, 340px, 30dvh); }
+}
+@media (max-height: 640px) {
+  body.play-mode .extras .pill { padding: 5px 10px; font-size: 12px; }
+  body.play-mode .btn.primary { width: 60px; height: 60px; }
+}
