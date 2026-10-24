@@ -136,21 +136,18 @@
       return;
     }
     if (hash.indexOf('#preview/') === 0) {
-      // 允許訪客透過預覽連結看自己的歌單，但正常來說預覽是給有登入的人用的
       showPlayView(hash.slice(9), true);
       return;
     }
     
-    // 權限攔截：未登入且不是播放頁面
-    if (!currentUser && !hash.startsWith('#play/')) {
-      if (hash.startsWith('#edit/')) {
-        toast('請先登入才能編輯歌單');
-      }
-      location.replace(location.pathname + location.search + '#list');
+    // 權限攔截：未登入不能進編輯頁
+    if (!currentUser && hash.startsWith('#edit/')) {
+      toast('請先登入才能編輯歌單');
+      location.replace(location.pathname + location.search + '#home');
       return;
     }
 
-    if (hash.indexOf('#edit/') === 0) {
+    if (hash.indexOf('#edit/') === 0 && currentUser) {
       showEditView(hash.slice(6));
       return;
     }
@@ -158,10 +155,12 @@
     stopPlayback();
 
     if (hash === '#play' || hash === '#preview' || hash === '#edit') {
-      location.replace(location.pathname + location.search + '#list');
+      location.replace(location.pathname + location.search + '#home');
       return;
     }
-    showListView();
+    
+    // 預設回首頁
+    showHomeView();
   }
 
   function stopPlayback() {
@@ -184,16 +183,16 @@
     window.scrollTo(0, 0);
   }
 
-  /* ============ 首頁視圖 ============ */
-  function showListView() {
+  /* ============ 首頁視圖 (訪客/會員切換) ============ */
+  function showHomeView() {
     if (currentUser) {
-      if (!isDirty) loadDraft(); // 如果沒有未儲存的變更，從本機拉資料
+      if (!isDirty) loadDraft();
       renderPlaylistGrid();
-      if ($('memberArea')) $('memberArea').hidden = false;
-      if ($('guestArea')) $('guestArea').hidden = true;
+      if ($('memberHome')) $('memberHome').hidden = false;
+      if ($('guestHome')) $('guestHome').hidden = true;
     } else {
-      if ($('memberArea')) $('memberArea').hidden = true;
-      if ($('guestArea')) $('guestArea').hidden = false;
+      if ($('memberHome')) $('memberHome').hidden = true;
+      if ($('guestHome')) $('guestHome').hidden = false;
     }
     show('viewHome');
   }
@@ -230,12 +229,13 @@
   /* ============ 編輯視圖 ============ */
   function showEditView(id) {
     if (!currentUser) {
-      location.hash = '#list';
+      location.hash = '#home';
       return;
     }
     var pl = state.playlists.find(p => p.id === id);
     if (!pl) {
-      showError('找不到該歌單');
+      toast('找不到該歌單，可能已被刪除');
+      location.hash = '#home';
       return;
     }
     currentPlaylistId = id;
@@ -465,7 +465,6 @@
 
     document.title = (playlist.name || 'Anime Vinyl') + ' — Anime Vinyl';
     
-    // 只有登入的人才能看到「返回首頁」按鈕
     if ($('backLink')) {
       $('backLink').hidden = !currentUser;
     }
@@ -847,18 +846,22 @@
     if (!window.firebaseAuth) return;
     window.firebaseAuth.signOut(window.firebaseAuth.auth);
     toast('已登出');
+    // 登出後強制回到首頁
+    location.hash = '#home';
   }
 
   function updateAuthUI(user) {
     currentUser = user;
     
-    var loginBtns = [$('loginBtn'), $('loginBtnPlay'), $('guestLoginBtn')];
+    var loginBtns = [$('loginBtnPlay'), $('guestLoginBtn')];
     var profiles = [$('userProfile'), $('userProfilePlay')];
     var dropdowns = [$('userDropdown'), $('userDropdownPlay')];
+    var homeUserArea = $('homeUserArea');
     
     if (user) {
       loginBtns.forEach(btn => { if (btn) btn.hidden = true; });
       profiles.forEach(prof => { if (prof) prof.hidden = false; });
+      if (homeUserArea) homeUserArea.hidden = false;
       
       var avatarUrl = user.photoURL || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
       var nameStr = user.displayName || '使用者';
@@ -870,34 +873,30 @@
       if ($('userEmail')) $('userEmail').textContent = user.email || '';
       if ($('userNamePlay')) $('userNamePlay').textContent = nameStr;
       
-      if ($('backLink')) $('backLink').hidden = false; // 登入後顯示返回按鈕
+      if ($('backLink')) $('backLink').hidden = false;
       
       loadDraftFromCloud();
     } else {
       loginBtns.forEach(btn => { if (btn) btn.hidden = false; });
       profiles.forEach(prof => { if (prof) prof.hidden = true; });
       dropdowns.forEach(dd => { if (dd) dd.hidden = true; });
+      if (homeUserArea) homeUserArea.hidden = true;
       
-      // 訪客狀態：如果他在播放頁，隱藏返回按鈕
       var hash = location.hash || '';
       if (hash.startsWith('#play/') && $('backLink')) {
         $('backLink').hidden = true;
       }
       
-      // 重新整理首頁狀態
-      if (!hash.startsWith('#play/')) {
-        showListView();
-      }
+      // 登出或未登入時，清空狀態並重新整理畫面
+      state = { playlists: [] };
+      renderPlaylistGrid();
     }
   }
 
   function bindAuthControls() {
-    // 綁定所有登入按鈕
-    if ($('loginBtn')) $('loginBtn').addEventListener('click', triggerLogin);
-    if ($('loginBtnPlay')) $('loginBtnPlay').addEventListener('click', triggerLogin);
     if ($('guestLoginBtn')) $('guestLoginBtn').addEventListener('click', triggerLogin);
+    if ($('loginBtnPlay')) $('loginBtnPlay').addEventListener('click', triggerLogin);
 
-    // 綁定頭像下拉選單
     var profiles = [$('userProfile'), $('userProfilePlay')];
     profiles.forEach(prof => {
       if (prof) {
@@ -911,16 +910,6 @@
 
     document.addEventListener('click', function() {
       document.querySelectorAll('.user-dropdown').forEach(dd => dd.hidden = true);
-    });
-
-    if ($('switchAccountBtn')) $('switchAccountBtn').addEventListener('click', function(e) {
-      e.stopPropagation();
-      if (!window.firebaseAuth) return;
-      var authAPI = window.firebaseAuth;
-      authAPI.signOut(authAPI.auth).then(function() {
-        authAPI.provider.setCustomParameters({ prompt: 'select_account' });
-        triggerLogin();
-      });
     });
 
     var logoutBtns = [$('logoutBtn'), ...document.querySelectorAll('.play-logout-btn')];
@@ -948,14 +937,11 @@
         authAPI.deleteUser(currentUser).then(function() {
           toast('帳號已刪除');
           localStorage.removeItem(LS_KEY);
-          state = { playlists: [] };
-          loadDraft();
-          location.hash = '#list';
-          updateAuthUI(null);
+          triggerLogout();
         }).catch(function(error) {
           if (error.code === 'auth/requires-recent-login') {
             toast('安全性考量，請先登出再重新登入，然後再執行刪除。', 5000);
-            authAPI.signOut(authAPI.auth);
+            triggerLogout();
           } else {
             toast('刪除失敗：' + error.message);
           }
@@ -969,7 +955,6 @@
     var authAPI = window.firebaseAuth;
     authAPI.onAuthStateChanged(authAPI.auth, function(user) {
       updateAuthUI(user);
-      // 登入狀態改變時，重新執行路由以確保畫面正確
       route();
     });
   }
