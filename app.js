@@ -1,7 +1,6 @@
 (function () {
   'use strict';
 
-  /* ============ 工具 ============ */
   var $ = function (id) { return document.getElementById(id); };
 
   function esc(s) {
@@ -27,7 +26,6 @@
     return m + ':' + (s < 10 ? '0' : '') + s;
   }
 
-  /* ============ YouTube 影片 ID 解析 ============ */
   function parseVideoId(input) {
     var s = String(input || '').trim();
     if (!s) return '';
@@ -116,7 +114,6 @@
     var json = JSON.stringify(mini);
     if (window.LZString && LZString.compressToEncodedURIComponent) {
       var compressed = LZString.compressToEncodedURIComponent(json);
-      // 把 + 換成 .，避免某些應用程式轉義成空白
       return 'L' + compressed.replace(/\+/g, '.');
     }
     return 'B' + b64urlEncode(json);
@@ -147,7 +144,6 @@
   function route() {
     var hash = location.hash || '';
 
-    // 如果要切換到播放或預覽頁面
     if (hash.indexOf('#play/') === 0) {
       showPlayView(hash.slice(6), false);
       return;
@@ -157,8 +153,8 @@
       return;
     }
 
-    // 以下為切換回編輯頁面的邏輯
-    stopPlayback(); // 強制停止音樂
+    // 切換回編輯頁面時，強制停止音樂
+    stopPlayback();
 
     if (hash === '#play' || hash === '#preview') {
       location.replace(location.pathname + location.search + '#edit');
@@ -167,7 +163,6 @@
     showEditView();
   }
 
-  // 徹底停止播放器的函式
   function stopPlayback() {
     if (player && player.stopVideo) {
       try {
@@ -252,7 +247,6 @@
     }
     updateCover();
 
-    // 輸入
     el.querySelectorAll('input[data-k]').forEach(function (inp) {
       inp.addEventListener('input', function () {
         var k = inp.dataset.k;
@@ -273,7 +267,6 @@
       });
     });
 
-    // 排序 / 刪除
     el.querySelectorAll('[data-act]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var act = btn.dataset.act;
@@ -307,6 +300,7 @@
   var currentIndex = 0;
   var progressTimer = null;
   var tapTimer = null;
+  var lastSec = -1; // 用於減少 DOM 操作
 
   function showPlayView(code, isPreview) {
     try {
@@ -316,7 +310,6 @@
       return;
     }
 
-    // 過濾掉無效歌曲
     playlist.songs = (playlist.songs || []).filter(function (s) {
       return parseVideoId(s.videoId);
     });
@@ -376,13 +369,8 @@
 
   function createYTPlayer(videoId) {
     var vars = {
-      autoplay: 0,
-      controls: 0,
-      disablekb: 1,
-      modestbranding: 1,
-      rel: 0,
-      playsinline: 1,
-      fs: 0
+      autoplay: 0, controls: 0, disablekb: 1,
+      modestbranding: 1, rel: 0, playsinline: 1, fs: 0
     };
     if (location.protocol.indexOf('http') === 0) vars.origin = location.origin;
 
@@ -434,11 +422,8 @@
   function onYTError(e) {
     $('tapPrompt').hidden = true;
     var msgs = {
-      2:   'YouTube 影片 ID 無效。',
-      5:   '這個影片無法在網頁中播放。',
-      100: '影片不存在或已設為私人。',
-      101: '影片擁有者不允許嵌入播放。',
-      150: '影片擁有者不允許嵌入播放。'
+      2: 'YouTube 影片 ID 無效。', 5: '這個影片無法在網頁中播放。',
+      100: '影片不存在或已設為私人。', 101: '影片擁有者不允許嵌入播放。', 150: '影片擁有者不允許嵌入播放。'
     };
     toast(msgs[e.data] || '影片載入失敗。');
   }
@@ -452,6 +437,7 @@
     $('fill').style.width = '0%';
     $('cur').textContent = '0:00';
     $('dur').textContent = '0:00';
+    lastSec = -1;
     var vid = parseVideoId(s.videoId);
     if (player && player.loadVideoById) {
       player.loadVideoById(vid);
@@ -462,14 +448,23 @@
 
   function startProgress() {
     stopProgress();
+    lastSec = -1;
     progressTimer = setInterval(function () {
       if (!player || !player.getDuration) return;
       var d = player.getDuration();
       var c = player.getCurrentTime();
       if (!d) return;
+      
+      // 更新進度條寬度
       $('fill').style.width = (c / d * 100) + '%';
-      $('cur').textContent = fmtTime(c);
-      $('dur').textContent = fmtTime(d);
+      
+      // 只有當秒數改變時，才更新文字，大幅減少 DOM 重繪
+      var sec = Math.floor(c);
+      if (sec !== lastSec) {
+        lastSec = sec;
+        $('cur').textContent = fmtTime(c);
+        $('dur').textContent = fmtTime(d);
+      }
     }, 250);
   }
 
@@ -491,10 +486,8 @@
       var url = thumbOf(s);
       btn.innerHTML =
         '<span class="di-cover"' + (url ? ' style="background-image:url(\'' + url + '\')"' : '') + '></span>' +
-        '<span class="di-info">' +
-          '<span class="di-title">' + esc(s.title || '未命名') + '</span>' +
-          '<span class="di-artist">' + esc(s.artist || s.anime || '') + '</span>' +
-        '</span>';
+        '<span class="di-info"><span class="di-title">' + esc(s.title || '未命名') + '</span>' +
+        '<span class="di-artist">' + esc(s.artist || s.anime || '') + '</span></span>';
       btn.addEventListener('click', function () {
         goToSong(i);
         $('playlistDrawer').hidden = true;
@@ -503,13 +496,12 @@
     });
   }
 
-  /* ============ 錯誤視圖 ============ */
   function showError(msg) {
     $('errorMsg').textContent = msg;
     show('viewError');
   }
 
-  /* ============ 播放控制綁定 ============ */
+  /* ============ 控制綁定 ============ */
   function bindPlayControls() {
     $('playBtn').addEventListener('click', function () {
       if (!player || !player.playVideo) return;
@@ -518,13 +510,8 @@
       else player.playVideo();
     });
 
-    $('prevBtn').addEventListener('click', function () {
-      goToSong(currentIndex - 1);
-    });
-
-    $('nextBtn').addEventListener('click', function () {
-      goToSong(currentIndex + 1);
-    });
+    $('prevBtn').addEventListener('click', function () { goToSong(currentIndex - 1); });
+    $('nextBtn').addEventListener('click', function () { goToSong(currentIndex + 1); });
 
     $('tapPrompt').addEventListener('click', function () {
       $('tapPrompt').hidden = true;
@@ -535,16 +522,12 @@
       $('playlistDrawer').hidden = !$('playlistDrawer').hidden;
     });
 
-    $('drawerClose').addEventListener('click', function () {
-      $('playlistDrawer').hidden = true;
-    });
-
+    $('drawerClose').addEventListener('click', function () { $('playlistDrawer').hidden = true; });
     $('playlistDrawer').addEventListener('click', function (e) {
       if (e.target === $('playlistDrawer')) $('playlistDrawer').hidden = true;
     });
   }
 
-  /* ============ 編輯控制綁定 ============ */
   function bindEditorControls() {
     $('playlistName').addEventListener('input', function (e) {
       state.name = e.target.value;
@@ -561,20 +544,13 @@
 
     $('previewBtn').addEventListener('click', function () {
       var valid = state.songs.filter(function (s) { return parseVideoId(s.videoId); });
-      if (!valid.length) {
-        toast('請先新增至少一首有 YouTube 影片 ID 的歌曲');
-        return;
-      }
-      var code = encodePlaylist(state);
-      location.hash = 'preview/' + code;
+      if (!valid.length) { toast('請先新增至少一首有 YouTube 影片 ID 的歌曲'); return; }
+      location.hash = 'preview/' + encodePlaylist(state);
     });
 
     $('shareBtn').addEventListener('click', function () {
       var valid = state.songs.filter(function (s) { return parseVideoId(s.videoId); });
-      if (!valid.length) {
-        toast('請先新增至少一首有 YouTube 影片 ID 的歌曲');
-        return;
-      }
+      if (!valid.length) { toast('請先新增至少一首有 YouTube 影片 ID 的歌曲'); return; }
       var code = encodePlaylist(state);
       var base = location.origin + location.pathname + location.search;
       var url = base + '#play/' + code;
@@ -587,7 +563,6 @@
       else if (len <= 800) tip = '建議使用 NTAG216（888 bytes）標籤，或減少歌曲數量。';
       else tip = '連結較長，建議減少歌曲數量，或改用 NTAG216 標籤。';
       $('shareInfo').textContent = '連結長度：' + len + ' 字元。' + tip;
-
       $('shareBox').scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
@@ -595,9 +570,8 @@
       var url = $('shareUrl').value;
       if (!url) return;
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(function () {
-          toast('已複製連結');
-        }).catch(function () {
+        navigator.clipboard.writeText(url).then(function () { toast('已複製連結'); })
+        .catch(function () {
           $('shareUrl').select();
           document.execCommand('copy');
           toast('已複製連結');
@@ -610,7 +584,6 @@
     });
   }
 
-  /* ============ 初始化 ============ */
   function init() {
     bindEditorControls();
     bindPlayControls();
