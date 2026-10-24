@@ -47,6 +47,19 @@
     return '';
   }
 
+  /* ============ 初始化 EQ 柱子 ============ */
+  function initEqBars() {
+    var eqContainer = $('eqContainer');
+    if (!eqContainer) return;
+    eqContainer.innerHTML = '';
+    // 生成 30 根密集的柱子
+    for (var i = 0; i < 30; i++) {
+      var bar = document.createElement('div');
+      bar.className = 'eq-bar';
+      eqContainer.appendChild(bar);
+    }
+  }
+
   /* ============ 資料層 ============ */
   var LS_KEY = 'anime-vinyl:draft';
   var state = { name: '我的黑膠歌單', songs: [] };
@@ -326,6 +339,7 @@
     $('backLink').hidden = !isPreview;
 
     currentIndex = 0;
+    initEqBars(); // 初始化等化器
     show('viewPlay');
     renderPlayMeta();
     renderDrawer();
@@ -342,13 +356,11 @@
     var url = thumbOf(s);
     $('label').style.backgroundImage = url ? 'url("' + url + '")' : '';
     
-    // 更新箭頭狀態
     $('prevArrow').classList.toggle('disabled', currentIndex === 0);
     $('nextArrow').classList.toggle('disabled', currentIndex >= playlist.songs.length - 1);
     $('prevBtn').disabled = currentIndex === 0;
     $('nextBtn').disabled = currentIndex >= playlist.songs.length - 1;
 
-    // 更新下滑視窗的資訊
     var vid = parseVideoId(s.videoId);
     $('ytLink').href = 'https://www.youtube.com/watch?v=' + vid;
     $('sheetImage').src = customImageUrl ? customImageUrl : url;
@@ -515,7 +527,6 @@
 
   /* ============ 手勢與事件綁定 ============ */
   
-  // 黑膠左右滑動與箭頭點擊
   function bindSwipeGestures() {
     var vinylPlinth = $('vinylPlinth');
     var vinyl = document.querySelector('.vinyl');
@@ -526,7 +537,6 @@
 
     var startX = 0, startY = 0, isSwiping = false;
 
-    // 複製節點來清除舊的監聽器
     var newPlinth = vinylPlinth.cloneNode(true);
     vinylPlinth.parentNode.replaceChild(newPlinth, vinylPlinth);
     vinylPlinth = newPlinth;
@@ -570,7 +580,6 @@
     }, { passive: true });
   }
 
-  // 下滑開啟 YT 視窗
   function bindYtSheetGestures() {
     var overlay = $('ytSheetOverlay');
     var sheet = $('ytSheet');
@@ -578,14 +587,12 @@
     var currentY = 0;
     var isDragging = false;
 
-    // 點擊背景或關閉按鈕關閉
     overlay.addEventListener('click', function(e) {
       if (e.target === overlay || e.target.id === 'ytCloseBtn') {
         closeSheet();
       }
     });
 
-    // 阻止視窗內部點擊事件冒泡
     sheet.addEventListener('click', function(e) {
       e.stopPropagation();
     });
@@ -595,7 +602,6 @@
       setTimeout(() => { overlay.hidden = true; }, 300);
     }
 
-    // 監聽下滑手勢 (綁定在整個播放頁面)
     var playWrap = document.querySelector('.play-wrap');
     playWrap.addEventListener('touchstart', function(e) {
       startY = e.touches[0].clientY;
@@ -606,10 +612,10 @@
     playWrap.addEventListener('touchmove', function(e) {
       if (!startY) return;
       currentY = e.touches[0].clientY;
+      // 判斷往上滑 (Y 變小)
       var diffY = currentY - startY;
 
-      // 只有往下滑超過 30px 才判定為下滑操作
-      if (diffY > 30) {
+      if (diffY < -30) {
         isDragging = true;
       }
     }, { passive: true });
@@ -617,10 +623,9 @@
     playWrap.addEventListener('touchend', function(e) {
       if (!startY) return;
       var diffY = currentY - startY;
-      // 下滑超過 80px 觸發
-      if (isDragging && diffY > 80) {
+      // 往上滑超過 80px 觸發
+      if (isDragging && diffY < -80) {
         overlay.hidden = false;
-        // 觸發 transition
         requestAnimationFrame(() => {
           overlay.classList.add('show');
         });
