@@ -324,7 +324,7 @@
     window.scrollTo(0, 0);
     var lock = id === 'viewPlay';
     document.body.classList.toggle('play-mode', lock);
-    if (!lock) stopPlayback();
+    if (!lock) { stopPlayback(); setSleep(0); }
     var vp = document.querySelector('meta[name="viewport"]');
     if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover' + (lock ? ', maximum-scale=1, user-scalable=no' : ''));
   }
@@ -341,6 +341,7 @@
       if ($('guestHome')) $('guestHome').hidden = false;
     }
     renderHistory();
+    renderTemplates();
     show('viewHome');
   }
 
@@ -686,8 +687,8 @@
     var h = {
       play: function () { if (player && player.playVideo) player.playVideo(); },
       pause: function () { if (player && player.pauseVideo) player.pauseVideo(); },
-      previoustrack: function () { goToSong(currentIndex - 1); },
-      nexttrack: function () { goToSong(currentIndex + 1); }
+      previoustrack: function () { goToSong(pickPrev()); },
+      nexttrack: function () { goToSong(pickNext(false)); }
     };
     Object.keys(h).forEach(function (k) { try { navigator.mediaSession.setActionHandler(k, h[k]); } catch (e) {} });
   }
@@ -780,11 +781,8 @@
       document.body.classList.remove('playing');
       if ($('playBtn')) $('playBtn').textContent = '▶';
       stopProgress();
-      if (currentIndex < playlist.songs.length - 1) {
-        goToSong(currentIndex + 1);
-      } else {
-        setBar(1);
-      }
+      var ni = pickNext(true);
+      if (ni >= 0) goToSong(ni); else setBar(1);
     }
   }
 
@@ -796,7 +794,7 @@
     };
     toast(msgs[e.data] || '影片載入失敗。');
     if (playlist && currentIndex < playlist.songs.length - 1) {
-      setTimeout(function () { goToSong(currentIndex + 1); }, 1500);
+      setTimeout(function () { goToSong(pickNext(false)); }, 1500);
     }
   }
 
@@ -915,9 +913,9 @@
 
       if (isSwiping && Math.abs(diffX) > 50 && Math.abs(diffY) < 80) {
         if (diffX > 0 && currentIndex > 0) {
-          goToSong(currentIndex - 1);
+          goToSong(pickPrev());
         } else if (diffX < 0 && currentIndex < playlist.songs.length - 1) {
-          goToSong(currentIndex + 1);
+          goToSong(pickNext(false));
         }
       }
       startX = 0; startY = 0; isSwiping = false;
@@ -933,13 +931,13 @@
       else player.playVideo();
     });
 
-    if ($('prevArrow')) $('prevArrow').addEventListener('click', function () { goToSong(currentIndex - 1); });
-    if ($('nextArrow')) $('nextArrow').addEventListener('click', function () { goToSong(currentIndex + 1); });
+    if ($('prevArrow')) $('prevArrow').addEventListener('click', function () { goToSong(pickPrev()); });
+    if ($('nextArrow')) $('nextArrow').addEventListener('click', function () { goToSong(pickNext(false)); });
     bindMediaKeys();
     if ($('vinylPlinth')) $('vinylPlinth').addEventListener('click', function () { if ($('playBtn')) $('playBtn').click(); });
 
-    if ($('prevBtn')) $('prevBtn').addEventListener('click', function () { goToSong(currentIndex - 1); });
-    if ($('nextBtn')) $('nextBtn').addEventListener('click', function () { goToSong(currentIndex + 1); });
+    if ($('prevBtn')) $('prevBtn').addEventListener('click', function () { goToSong(pickPrev()); });
+    if ($('nextBtn')) $('nextBtn').addEventListener('click', function () { goToSong(pickNext(false)); });
 
     if ($('tapPrompt')) $('tapPrompt').addEventListener('click', function () {
       $('tapPrompt').hidden = true;
@@ -1018,7 +1016,7 @@
   }
 
   function bindFx() {
-    var sel = '.btn,.btn-block,.icon-btn,.btn-save,.btn-google,.drawer-toggle,.drawer-close,.drawer-item,.playlist-card,.nav-arrow,.dropdown-item';
+    var sel = '.btn,.btn-block,.icon-btn,.btn-save,.btn-google,.drawer-toggle,.drawer-close,.drawer-item,.playlist-card,.nav-arrow,.dropdown-item,.pill,.swatch,.seg button';
     document.addEventListener('pointerdown', function (e) {
       var el = e.target.closest && e.target.closest(sel);
       if (!el || el.disabled) return;
@@ -1049,6 +1047,195 @@
     function sync() { btn.textContent = (document.fullscreenElement || document.webkitFullscreenElement) ? '✕' : '⛶'; }
     document.addEventListener('fullscreenchange', sync);
     document.addEventListener('webkitfullscreenchange', sync);
+  }
+
+  /* ============ 範本歌單 ============ */
+  // 填入你確認過可嵌入播放的 YouTube 影片 ID(或完整網址)後,範本才會顯示在首頁。
+  var TEMPLATES = [
+    { name: '熱門動漫 OP 精選', songs: [
+      { anime: '鬼滅之刃', title: '紅蓮華', artist: 'LiSA', videoId: '' },
+      { anime: '咒術迴戰', title: '廻廻奇譚', artist: 'Eve', videoId: '' },
+      { anime: '孤獨搖滾', title: '青春コンプレックス', artist: '結束バンド', videoId: '' },
+      { anime: '葬送的芙莉蓮', title: '勇者', artist: 'YOASOBI', videoId: '' }
+    ] },
+    { name: '深夜放鬆 動漫歌', songs: [
+      { anime: '你的名字', title: '前前前世', artist: 'RADWIMPS', videoId: '' },
+      { anime: '天気の子', title: '愛にできることはまだあるかい', artist: 'RADWIMPS', videoId: '' },
+      { anime: '輝夜姬想讓人告白', title: 'Love Dramatic', artist: '鈴木雅之', videoId: '' }
+    ] }
+  ];
+
+  function renderTemplates() {
+    var sec = $('templateSection'), list = $('templateList');
+    if (!sec || !list) return;
+    list.innerHTML = '';
+    var shown = 0;
+    TEMPLATES.forEach(function (t) {
+      var songs = t.songs.filter(function (x) { return parseVideoId(x.videoId); });
+      if (!songs.length) return;
+      shown++;
+      var row = document.createElement('div');
+      row.className = 'playlist-card';
+      row.innerHTML = '<a class="pc-left"><span class="hist-cover"></span><span class="pc-info"><span class="pc-title">' + esc(t.name) +
+        '</span><span class="pc-meta">' + songs.length + ' 首 · 點擊試聽</span></span></a>' +
+        (currentUser ? '<button type="button" class="icon-btn" aria-label="複製到我的歌單" title="複製到我的歌單">＋</button>' : '');
+      row.querySelector('a').setAttribute('href', '#play/' + encodePlaylist({ name: t.name, songs: songs }));
+      var u = thumbOf(songs[0]);
+      if (u) row.querySelector('.hist-cover').style.backgroundImage = 'url("' + u.replace(/"/g, '%22') + '")';
+      var btn = row.querySelector('button');
+      if (btn) btn.addEventListener('click', function () {
+        var pl = createEmptyPlaylist(t.name);
+        pl.songs = songs.map(function (x) { return { anime: x.anime || '', title: x.title || '', artist: x.artist || '', videoId: x.videoId, cover: x.cover || '' }; });
+        state.playlists.push(pl);
+        saveDraft(); saveDraftToCloud(true);
+        toast('已複製到我的歌單');
+        location.hash = '#edit/' + pl.id;
+      });
+      list.appendChild(row);
+    });
+    sec.hidden = !shown;
+  }
+
+  /* ============ 播放模式 / 睡眠定時 / 外觀 ============ */
+  var MODES = [['off', '➡️ 順序'], ['all', '🔁 循環'], ['one', '🔂 單曲'], ['shuffle', '🔀 隨機']];
+  var playMode = 'off';
+  var SLEEP_OPTS = [0, 15, 30, 60], sleepIdx = 0, sleepAt = 0, sleepTick = null;
+  var ACCENTS = [['青', '#00e5ff'], ['櫻', '#ff6fb5'], ['紫', '#a78bfa'], ['琥珀', '#ffb020'], ['薄荷', '#34d399'], ['紅蓮', '#ff4757']];
+  var VINYLS = [['經典黑', '#0d0d0d', '#151515'], ['血紅', '#3a0b10', '#561219'], ['冰藍', '#0b2a3d', '#12405c'], ['粉紅', '#3d0b2a', '#5c1240'], ['金', '#3a2c0b', '#5c4412']];
+  var LABELS = [['cover', '封面圖'], ['solid', '純色'], ['gradient', '漸層']];
+  var theme = { accent: 0, vinyl: 0, label: 'cover' };
+
+  function pickNext(auto) {
+    var n = playlist.songs.length;
+    if (auto && playMode === 'one') return currentIndex;
+    if (playMode === 'shuffle' && n > 1) {
+      var i;
+      do { i = Math.floor(Math.random() * n); } while (i === currentIndex);
+      return i;
+    }
+    if (currentIndex < n - 1) return currentIndex + 1;
+    return playMode === 'off' ? -1 : 0;
+  }
+
+  function pickPrev() {
+    if (currentIndex > 0) return currentIndex - 1;
+    return playMode === 'off' ? -1 : playlist.songs.length - 1;
+  }
+
+  function setSleep(min) {
+    clearInterval(sleepTick);
+    sleepAt = min ? Date.now() + min * 60000 : 0;
+    var b = $('sleepBtn');
+    if (!min) {
+      if (b) { b.textContent = '😴 定時'; b.classList.remove('on'); }
+      sleepIdx = 0;
+      return;
+    }
+    if (b) b.classList.add('on');
+    tickSleep();
+    sleepTick = setInterval(tickSleep, 1000);
+  }
+
+  function tickSleep() {
+    if (!sleepAt) return;
+    var left = sleepAt - Date.now();
+    var b = $('sleepBtn');
+    if (left <= 0) {
+      if (player && player.pauseVideo) { player.pauseVideo(); if (player.setVolume) player.setVolume(100); }
+      setSleep(0);
+      toast('睡眠定時已到，晚安 🌙');
+      return;
+    }
+    if (left < 10000 && player && player.setVolume) player.setVolume(Math.max(5, Math.round(left / 100)));
+    if (b) b.textContent = '😴 ' + Math.ceil(left / 60000) + ' 分';
+  }
+
+  function applyTheme() {
+    var a = ACCENTS[theme.accent][1], v = VINYLS[theme.vinyl];
+    var r = parseInt(a.slice(1, 3), 16), g = parseInt(a.slice(3, 5), 16), bl = parseInt(a.slice(5, 7), 16);
+    var st = document.documentElement.style;
+    st.setProperty('--accent', a);
+    st.setProperty('--accent-rgb', r + ',' + g + ',' + bl);
+    st.setProperty('--accent-dim', 'rgba(' + r + ',' + g + ',' + bl + ',.2)');
+    st.setProperty('--vinyl-a', v[1]);
+    st.setProperty('--vinyl-b', v[2]);
+    document.body.setAttribute('data-label', theme.label);
+  }
+
+  function saveTheme() {
+    try { localStorage.setItem('anime-vinyl:theme', JSON.stringify(theme)); } catch (e) {}
+  }
+
+  function bindExtras() {
+    try {
+      var m = localStorage.getItem('anime-vinyl:mode');
+      if (MODES.some(function (x) { return x[0] === m; })) playMode = m;
+      var t = JSON.parse(localStorage.getItem('anime-vinyl:theme'));
+      if (t) {
+        if (t.accent >= 0 && t.accent < ACCENTS.length) theme.accent = t.accent | 0;
+        if (t.vinyl >= 0 && t.vinyl < VINYLS.length) theme.vinyl = t.vinyl | 0;
+        if (LABELS.some(function (x) { return x[0] === t.label; })) theme.label = t.label;
+      }
+    } catch (e) {}
+    applyTheme();
+
+    var modeBtn = $('modeBtn');
+    function showMode() {
+      var cur = MODES.filter(function (x) { return x[0] === playMode; })[0];
+      modeBtn.textContent = cur[1];
+      modeBtn.classList.toggle('on', playMode !== 'off');
+    }
+    showMode();
+    modeBtn.addEventListener('click', function () {
+      var i = MODES.findIndex(function (x) { return x[0] === playMode; });
+      playMode = MODES[(i + 1) % MODES.length][0];
+      try { localStorage.setItem('anime-vinyl:mode', playMode); } catch (e) {}
+      showMode();
+    });
+
+    $('sleepBtn').addEventListener('click', function () {
+      sleepIdx = (sleepIdx + 1) % SLEEP_OPTS.length;
+      var min = SLEEP_OPTS[sleepIdx];
+      setSleep(min);
+      sleepIdx = SLEEP_OPTS.indexOf(min);
+      if (min) toast('將在 ' + min + ' 分鐘後停止播放'); else toast('已取消睡眠定時');
+    });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) tickSleep(); });
+
+    function swatches(boxId, items, key, paint) {
+      var box = $(boxId);
+      box.innerHTML = '';
+      items.forEach(function (it, i) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'swatch' + (theme[key] === i ? ' active' : '');
+        b.setAttribute('aria-label', it[0]);
+        b.style.background = paint(it);
+        b.addEventListener('click', function () {
+          theme[key] = i; applyTheme(); saveTheme();
+          Array.prototype.forEach.call(box.children, function (c, j) { c.classList.toggle('active', j === i); });
+        });
+        box.appendChild(b);
+      });
+    }
+    swatches('accentSwatches', ACCENTS, 'accent', function (it) { return it[1]; });
+    swatches('vinylSwatches', VINYLS, 'vinyl', function (it) { return 'radial-gradient(circle, ' + it[2] + ' 30%, ' + it[1] + ' 31%, ' + it[2] + ' 60%, ' + it[1] + ' 62%)'; });
+    var seg = $('labelSeg');
+    LABELS.forEach(function (it) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it[1];
+      b.className = theme.label === it[0] ? 'active' : '';
+      b.addEventListener('click', function () {
+        theme.label = it[0]; applyTheme(); saveTheme();
+        Array.prototype.forEach.call(seg.children, function (c) { c.classList.toggle('active', c === b); });
+      });
+      seg.appendChild(b);
+    });
+    var modal = $('themeModal');
+    $('themeBtn').addEventListener('click', function () { modal.hidden = false; });
+    $('themeDone').addEventListener('click', function () { modal.hidden = true; });
+    modal.addEventListener('click', function (e) { if (e.target === modal) modal.hidden = true; });
   }
 
   function bindEditorControls() {
@@ -1431,6 +1618,7 @@
     bindZoomLock();
     bindFx();
     bindFullscreen();
+    bindExtras();
     
     loadDraft();
     
