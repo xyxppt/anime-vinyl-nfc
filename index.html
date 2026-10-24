@@ -140,7 +140,7 @@
 <!-- 將 Firebase 直接寫在這裡，確保載入完成 -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -159,10 +159,10 @@
     const db = getFirestore(app);
     const provider = new GoogleAuthProvider();
     
-    window.firebaseAuth = { auth, provider, signInWithRedirect, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged, deleteUser };
+    // 只保留 signInWithPopup 供登入使用
+    window.firebaseAuth = { auth, provider, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged, deleteUser };
     window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc };
     
-    // 觸發自訂事件，通知 app.js Firebase 已準備好
     window.dispatchEvent(new Event('firebaseReady'));
   } catch (e) {
     console.error("Firebase 初始化失敗", e);
