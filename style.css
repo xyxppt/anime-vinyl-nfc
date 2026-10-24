@@ -359,7 +359,6 @@ body { padding-top: calc(16px + env(safe-area-inset-top)); padding-left: max(16p
 
 /* ===== 主題 / 播放模式 / 範本 ===== */
 :root { --accent-rgb: 0, 229, 255; --vinyl-a: #0d0d0d; --vinyl-b: #151515; }
-.vinyl { background: repeating-radial-gradient(circle at 50% 50%, var(--vinyl-a) 0px, var(--vinyl-a) 1.5px, var(--vinyl-b) 2px, var(--vinyl-a) 3px); }
 body[data-label="solid"] .label { background-image: none !important; background-color: var(--accent); }
 body[data-label="gradient"] .label { background-image: conic-gradient(from 0deg, var(--accent), #ffffff55, var(--accent), #00000055, var(--accent)) !important; }
 
@@ -378,3 +377,25 @@ body.play-mode .plinth-wrapper { width: min(85vw, 340px, 32dvh); }
 .seg { display: flex; gap: 8px; }
 .seg button { flex: 1; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); color: var(--text-main); padding: 9px 0; border-radius: 10px; font-size: 13px; }
 .seg button.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px var(--accent-dim); }
+
+/* ===== 唱片紋路(同心紋路 + 旋轉時可見的反光) ===== */
+.vinyl, .vinyl-face {
+  background:
+    conic-gradient(from 25deg, transparent 0deg, rgba(255,255,255,.22) 26deg, transparent 60deg, transparent 180deg, rgba(255,255,255,.15) 206deg, transparent 240deg),
+    repeating-radial-gradient(circle at 50% 50%, transparent 0, transparent 1.6px, rgba(255,255,255,var(--groove, .16)) 2px, transparent 2.4px),
+    repeating-radial-gradient(circle at 50% 50%, transparent 0, transparent 22px, rgba(0,0,0,.5) 23px, transparent 25px),
+    var(--vinyl-a);
+}
+.vinyl { box-shadow: inset 0 0 0 1px rgba(255,255,255,.1), inset 0 0 26px rgba(0,0,0,.55), 0 0 15px var(--accent-dim); }
+
+/* ===== 外觀面板 ===== */
+.theme-panel { max-height: 88dvh; overflow-y: auto; touch-action: pan-y; }
+.theme-preview { display: grid; place-items: center; margin: 4px 0 2px; }
+.vinyl-face { position: relative; width: 112px; height: 112px; border-radius: 50%; animation: spin 8s linear infinite; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1), inset 0 0 18px rgba(0,0,0,.55), 0 0 18px var(--accent-dim); }
+.vinyl-label { position: absolute; inset: 32%; border-radius: 50%; background: #2a2d40; box-shadow: 0 0 0 2px rgba(255,255,255,.15), 0 0 0 5px rgba(0,0,0,.5); }
+body[data-label="solid"] .vinyl-label { background: var(--accent); }
+body[data-label="gradient"] .vinyl-label { background: conic-gradient(from 0deg, var(--accent), #ffffff55, var(--accent), #00000055, var(--accent)); }
+.picker-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 13px; color: var(--text-muted); }
+.picker-row span { min-width: 34px; }
+.picker-row input[type="color"] { width: 46px; height: 30px; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: none; padding: 2px; cursor: pointer; }
+.picker-row input[type="range"] { flex: 1; accent-color: var(--accent); }
