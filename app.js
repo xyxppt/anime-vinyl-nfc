@@ -18,6 +18,7 @@
   var toastTimer = null;
   function toast(msg, ms) {
     var t = $('toast');
+    if (!t) return;
     t.textContent = msg;
     t.hidden = false;
     clearTimeout(toastTimer);
@@ -689,65 +690,80 @@
 
   /* ============ 登入與初始化 ============ */
   function setupAuth() {
-    // 確保 Firebase 物件有載入
     if (!window.firebaseAuth) {
-      console.log('等待 Firebase 載入...');
-      setTimeout(setupAuth, 100);
+      // 如果 Firebase 沒載入成功（例如被手機瀏覽器阻擋），就不綁定登入按鈕
+      console.log('Firebase 未載入，停用登入功能。');
       return;
     }
     
     authAPI = window.firebaseAuth;
     dbAPI = window.firebaseDB;
 
-    authAPI.getRedirectResult(authAPI.auth).then(function(result) {
-      if (result && result.user) {
-        toast('登入成功！');
-      }
-    }).catch(function(error) {
-      toast('登入失敗：' + error.message);
-    });
-    
-    authAPI.onAuthStateChanged(authAPI.auth, function(user) {
-      currentUser = user;
-      var loginBtn = $('loginBtn');
-      var logoutBtn = $('logoutBtn');
-      var userInfo = $('userInfo');
-      
-      if (user) {
-        loginBtn.style.display = 'none';
-        logoutBtn.style.display = 'inline-block';
-        userInfo.style.display = 'inline-block';
-        userInfo.textContent = '👤 ' + (user.displayName || user.email).split(' ')[0];
-        loadDraftFromCloud();
-      } else {
-        loginBtn.style.display = 'inline-block';
-        logoutBtn.style.display = 'none';
-        userInfo.style.display = 'none';
-        loadDraft();
-        if (!state.songs.length) state.songs.push(newSong());
-        $('playlistName').value = state.name;
-        renderEditor();
-      }
-    });
-
-    $('loginBtn').addEventListener('click', function() {
-      authAPI.signInWithRedirect(authAPI.auth, authAPI.provider).catch(function(error) {
-        toast('無法跳轉登入：' + error.message);
+    try {
+      authAPI.getRedirectResult(authAPI.auth).then(function(result) {
+        if (result && result.user) {
+          toast('登入成功！');
+        }
+      }).catch(function(error) {
+        console.warn('登入跳轉結果錯誤：', error);
       });
-    });
+      
+      authAPI.onAuthStateChanged(authAPI.auth, function(user) {
+        currentUser = user;
+        var loginBtn = $('loginBtn');
+        var logoutBtn = $('logoutBtn');
+        var userInfo = $('userInfo');
+        
+        if (user) {
+          loginBtn.style.display = 'none';
+          logoutBtn.style.display = 'inline-block';
+          userInfo.style.display = 'inline-block';
+          userInfo.textContent = '👤 ' + (user.displayName || user.email).split(' ')[0];
+          loadDraftFromCloud();
+        } else {
+          loginBtn.style.display = 'inline-block';
+          logoutBtn.style.display = 'none';
+          userInfo.style.display = 'none';
+          loadDraft();
+          if (!state.songs.length) state.songs.push(newSong());
+          $('playlistName').value = state.name;
+          renderEditor();
+        }
+      });
 
-    $('logoutBtn').addEventListener('click', function() {
-      authAPI.signOut(authAPI.auth);
-      toast('已登出');
-    });
+      $('loginBtn').addEventListener('click', function() {
+        // 提示使用者如果是用 LINE/FB 內建瀏覽器，可能會被阻擋
+        authAPI.signInWithRedirect(authAPI.auth, authAPI.provider).catch(function(error) {
+          toast('無法跳轉登入：' + error.message);
+        });
+      });
+
+      $('logoutBtn').addEventListener('click', function() {
+        authAPI.signOut(authAPI.auth);
+        toast('已登出');
+      });
+    } catch (e) {
+      console.error("登入初始化失敗", e);
+    }
   }
 
   function init() {
-    bindEditorControls();
-    bindPlayControls();
-    setupAuth(); // 啟動 Firebase 登入監聽
-    route();
-    window.addEventListener('hashchange', route);
+    try {
+      bindEditorControls();
+      bindPlayControls();
+      
+      // 1. 優先執行路由，確保畫面一定顯示得出來
+      route(); 
+      
+      // 2. 再嘗試設定登入功能
+      setupAuth(); 
+
+      window.addEventListener('hashchange', route);
+    } catch (e) {
+      // 如果真的發生不可預期的錯誤，確保有東西顯示，而不是全黑
+      console.error("初始化失敗", e);
+      document.body.innerHTML = '<div style="color:white; padding:20px; text-align:center;">載入失敗，請重新整理。<br>' + e.message + '</div>';
+    }
   }
 
   if (document.readyState === 'loading') {
