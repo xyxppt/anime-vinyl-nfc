@@ -28,11 +28,9 @@ main { width: 100%; display: flex; justify-content: center; }
 /* ===== 播放視圖 ===== */
 #viewPlay { flex-direction: column; align-items: center; justify-content: flex-start; }
 .play-wrap { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
-
 .top-bar { width: 100%; display: flex; align-items: center; justify-content: space-between; position: relative; min-height: 40px; }
 .back-link { color: var(--text-muted); text-decoration: none; font-size: 14px; padding: 8px 12px 8px 0; border-radius: 8px; }
 .play-top-actions { display: flex; align-items: center; }
-
 .drawer-toggle { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); color: var(--text-main); padding: 8px 16px; border-radius: 999px; font-size: 13px; cursor: pointer; backdrop-filter: blur(8px); }
 
 .plinth-wrapper { position: relative; width: min(85vw, 340px); aspect-ratio: 1; display: flex; align-items: center; justify-content: center; margin-top: 10px; }
@@ -96,7 +94,7 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .di-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .di-artist { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ===== 總覽與編輯視圖通用 ===== */
+/* ===== 首頁與編輯視圖通用 ===== */
 #viewHome, #viewEdit { flex-direction: column; align-items: center; justify-content: flex-start; }
 .edit-wrap { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
 
@@ -117,6 +115,48 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .dropdown-item { padding: 14px 16px; background: transparent; border: none; color: var(--text-main); font-size: 14px; text-align: left; cursor: pointer; font-family: inherit; transition: background .15s; }
 .dropdown-item:hover, .dropdown-item:active { background: rgba(255,255,255,.05); }
 .dropdown-item.danger { color: var(--danger); }
+
+/* 歡迎畫面 (未登入) */
+.guest-hero {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 180px;
+  margin-top: 40px;
+  position: relative;
+}
+.glowing-vinyl {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: #000;
+  box-shadow: 0 0 40px var(--accent-dim), inset 0 0 20px rgba(255,255,255,0.1);
+  animation: spin 4s linear infinite;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.vinyl-inner {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 20px var(--accent);
+}
+.guest-title {
+  text-align: center;
+  color: #fff;
+  font-size: 24px;
+  margin-top: 20px;
+}
+.guest-desc {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin-top: 12px;
+  padding: 0 20px;
+}
 
 /* 總覽頁面卡片 */
 .list-actions { margin-top: 10px; margin-bottom: 8px; }
