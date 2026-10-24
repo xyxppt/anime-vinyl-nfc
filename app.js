@@ -693,31 +693,60 @@
     });
   }
 
-  /* ============ 登入事件 (提前綁定) ============ */
+  /* ============ 登入與 UI 切換 ============ */
+  function updateAuthUI(user) {
+    currentUser = user;
+    var loginBtn = $('loginBtn');
+    var userProfile = $('userProfile');
+    var userAvatar = $('userAvatar');
+    var userName = $('userName');
+    var userEmail = $('userEmail');
+    var userDropdown = $('userDropdown');
+    
+    if (user) {
+      if (loginBtn) loginBtn.hidden = true;
+      if (userProfile) userProfile.hidden = false;
+      
+      if (userAvatar) userAvatar.src = user.photoURL || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
+      if (userName) userName.textContent = user.displayName || '使用者';
+      if (userEmail) userEmail.textContent = user.email || '';
+      
+      loadDraftFromCloud();
+    } else {
+      if (loginBtn) loginBtn.hidden = false;
+      if (userProfile) userProfile.hidden = true;
+      if (userDropdown) userDropdown.hidden = true;
+      
+      loadDraft();
+      if (!state.songs.length) state.songs.push(newSong());
+      if ($('playlistName')) $('playlistName').value = state.name;
+      renderEditor();
+    }
+  }
+
   function bindAuthControls() {
-    // 登入按鈕
+    // 登入按鈕 (全面改用 Popup)
     if ($('loginBtn')) $('loginBtn').addEventListener('click', function() {
       if (!window.firebaseAuth) {
         toast('登入模組載入中，請稍候再試...');
         return;
       }
-      var authAPI = window.firebaseAuth;
       
-      var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      
-      if (isMobile) {
-        authAPI.signInWithRedirect(authAPI.auth, authAPI.provider).catch(function(error) {
-          toast('無法跳轉登入：' + error.message);
-        });
-      } else {
-        authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(function(error) {
-          if (error.code === 'auth/popup-blocked') {
-            toast('彈出視窗被阻擋，請允許後重試');
-          } else if (error.code !== 'auth/popup-closed-by-user') {
-            toast('登入失敗：' + error.message);
-          }
-        });
+      // 偵測是否是常見的社群 App 內建瀏覽器 (如 LINE, FB, IG)
+      var ua = navigator.userAgent || navigator.vendor || window.opera;
+      if (ua.indexOf("FBAN") > -1 || ua.indexOf("FBAV") > -1 || ua.indexOf("Line") > -1 || ua.indexOf("Instagram") > -1) {
+        toast('請點擊右上角選單，選擇「使用外部瀏覽器」開啟本頁面進行登入。', 5000);
+        return;
       }
+
+      var authAPI = window.firebaseAuth;
+      authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(function(error) {
+        if (error.code === 'auth/popup-blocked') {
+          toast('彈出視窗被阻擋，請允許本站顯示彈出視窗後重試。');
+        } else if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+          toast('登入失敗：' + error.message);
+        }
+      });
     });
 
     // 頭像點擊展開選單
@@ -741,12 +770,7 @@
       
       authAPI.signOut(authAPI.auth).then(function() {
         authAPI.provider.setCustomParameters({ prompt: 'select_account' });
-        var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        if (isMobile) {
-          authAPI.signInWithRedirect(authAPI.auth, authAPI.provider);
-        } else {
-          authAPI.signInWithPopup(authAPI.auth, authAPI.provider);
-        }
+        authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(console.error);
       });
     });
 
@@ -793,64 +817,23 @@
     });
   }
 
-  /* ============ Firebase 狀態監聽 ============ */
   function setupAuthListener() {
     if (!window.firebaseAuth) return;
     var authAPI = window.firebaseAuth;
-    var dbAPI = window.firebaseDB;
-
-    // 處理跳轉回來的結果
-    authAPI.getRedirectResult(authAPI.auth).then(function(result) {
-      if (result && result.user) {
-        toast('登入成功！');
-      }
-    }).catch(function(error) {
-      console.warn('登入跳轉結果錯誤：', error);
-    });
     
-    // 監聽登入狀態
     authAPI.onAuthStateChanged(authAPI.auth, function(user) {
-      currentUser = user;
-      
-      var loginBtn = $('loginBtn');
-      var userProfile = $('userProfile');
-      var userAvatar = $('userAvatar');
-      var userName = $('userName');
-      var userEmail = $('userEmail');
-      var userDropdown = $('userDropdown');
-      
-      if (user) {
-        if (loginBtn) loginBtn.style.display = 'none';
-        if (userProfile) userProfile.style.display = 'block';
-        
-        if (userAvatar) userAvatar.src = user.photoURL || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
-        if (userName) userName.textContent = user.displayName || '使用者';
-        if (userEmail) userEmail.textContent = user.email || '';
-        
-        loadDraftFromCloud();
-      } else {
-        if (loginBtn) loginBtn.style.display = 'flex';
-        if (userProfile) userProfile.style.display = 'none';
-        if (userDropdown) userDropdown.hidden = true;
-        
-        loadDraft();
-        if (!state.songs.length) state.songs.push(newSong());
-        if ($('playlistName')) $('playlistName').value = state.name;
-        renderEditor();
-      }
+      updateAuthUI(user);
     });
   }
 
   /* ============ 初始化 ============ */
   function init() {
-    // 1. 立刻綁定所有按鈕事件（包含登入）
     bindEditorControls();
     bindPlayControls();
-    bindAuthControls();
+    bindAuthControls(); // 先綁定登入事件
     route();
     window.addEventListener('hashchange', route);
 
-    // 2. 檢查 Firebase 是否準備好
     if (window.firebaseAuth) {
       setupAuthListener();
     } else {
