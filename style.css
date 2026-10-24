@@ -2,7 +2,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
 
 :root {
-  --accent: #00e5ff; /* 霓虹青 */
+  --accent: #00e5ff;
   --accent-dim: rgba(0, 229, 255, 0.2);
   --bg-dark: #050508;
   --panel: #12141a;
@@ -41,7 +41,9 @@ main { width: 100%; display: flex; justify-content: center; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
+  position: relative;
+  min-height: 85vh;
 }
 
 .top-bar {
@@ -67,11 +69,37 @@ main { width: 100%; display: flex; justify-content: center; }
   backdrop-filter: blur(8px);
 }
 
-/* ===== 唱盤底座 (科技玻璃感) ===== */
-.plinth {
+/* ===== 唱盤區塊與箭頭 ===== */
+.plinth-wrapper {
   position: relative;
   width: min(85vw, 340px);
   aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  padding: 15px;
+  z-index: 10;
+  transition: color 0.2s, opacity 0.2s;
+  user-select: none;
+}
+.nav-arrow:active { color: var(--accent); }
+.nav-arrow.left { left: -20px; }
+.nav-arrow.right { right: -20px; }
+.nav-arrow.disabled { opacity: 0; pointer-events: none; }
+
+.plinth {
+  position: relative;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   background: linear-gradient(145deg, #161822, #0a0b0f);
   box-shadow: 
@@ -106,13 +134,8 @@ main { width: 100%; display: flex; justify-content: center; }
   animation-play-state: paused;
   will-change: transform;
   transform: translateZ(0);
-  /* 滑動時的過渡效果 */
   transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-
-/* 滑動時的視覺回饋 */
-.vinyl.swiping-left { transform: translateX(-10px) rotate(15deg) translateZ(0); }
-.vinyl.swiping-right { transform: translateX(10px) rotate(-15deg) translateZ(0); }
 
 body.playing .vinyl { animation-play-state: running; }
 
@@ -126,7 +149,6 @@ body.playing .vinyl { animation-play-state: running; }
   background: conic-gradient(from 20deg, rgba(255,255,255,0) 0deg, rgba(0,229,255,.05) 38deg, rgba(255,255,255,0) 92deg, rgba(255,255,255,0) 190deg, rgba(255,255,255,.03) 225deg, rgba(255,255,255,0) 275deg);
 }
 
-/* ===== 中央封面 ===== */
 .label {
   position: absolute; inset: 32%; border-radius: 50%;
   background-color: #1a1c29; background-size: cover; background-position: center;
@@ -147,7 +169,6 @@ body.playing .vinyl { animation-play-state: running; }
   z-index: 3;
 }
 
-/* ===== 唱臂 (金屬科技) ===== */
 .tonearm {
   position: absolute; top: 8%; right: 10%;
   width: 0; height: 55%;
@@ -186,45 +207,109 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .title { font-size: 22px; font-weight: 700; letter-spacing: .03em; line-height: 1.3; color: #fff; text-shadow: 0 0 15px rgba(255,255,255,.15); }
 .artist { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
 
-/* ===== 波浪進度條 ===== */
-.progress { width: 100%; max-width: 330px; }
-.bar { 
-  height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); 
-  overflow: hidden; position: relative;
-  box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
+/* ===== 波浪進度條區塊 ===== */
+.progress-area {
+  position: relative;
+  width: 100%;
+  max-width: 330px;
+  margin-top: 10px;
 }
 
+/* 波浪容器 */
+.wave-container {
+  position: absolute;
+  top: -20px; /* 浮在進度條上方 */
+  left: 0;
+  width: 100%;
+  height: 24px;
+  overflow: hidden;
+  pointer-events: none;
+  /* 預設波浪下降消失 */
+  transform: translateY(100%);
+  opacity: 0;
+  transition: transform 0.6s ease-in, opacity 0.6s ease-in;
+}
+
+/* 播放時波浪升起 */
+body.playing .wave-container {
+  transform: translateY(0);
+  opacity: 1;
+  transition: transform 0.4s ease-out, opacity 0.4s ease-out;
+}
+
+/* 製作實體波浪效果 */
+.wave {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.4;
+  border-radius: 45%;
+}
+
+.wave1 {
+  animation: wave-move 3s linear infinite;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+
+.wave2 {
+  bottom: 4px;
+  opacity: 0.2;
+  animation: wave-move 5s linear infinite reverse;
+  background: linear-gradient(90deg, transparent, #0097a7, transparent);
+}
+
+/* 播放時才開始跑波浪 */
+body:not(.playing) .wave {
+  animation-play-state: paused;
+}
+
+@keyframes wave-move {
+  0% { transform: translateX(0) rotate(0deg); }
+  100% { transform: translateX(-50%) rotate(360deg); }
+}
+
+/* 進度條本體 */
+.progress { width: 100%; position: relative; z-index: 2; }
+.bar { 
+  height: 4px; border-radius: 2px; background: rgba(255,255,255,.08); 
+  overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
+}
 .fill { 
-  height: 100%; width: 100%; border-radius: 3px; 
-  /* 波浪紋理背景 */
-  background: 
-    repeating-linear-gradient(
-      -45deg,
-      var(--accent) 0%, var(--accent) 25%, 
-      #0097a7 25%, #0097a7 50%,
-      var(--accent) 50%, var(--accent) 75%,
-      #0097a7 75%, #0097a7 100%
-    );
-  background-size: 200% 100%;
-  /* 流動動畫 */
-  animation: wave-move 2s linear infinite;
-  
+  height: 100%; width: 100%; border-radius: 2px; 
+  background: var(--accent);
   transform-origin: left center;
   transform: scaleX(0);
   will-change: transform;
   box-shadow: 0 0 10px var(--accent-dim);
 }
-
-/* 波浪流動關鍵影格 */
-@keyframes wave-move {
-  0% { background-position: 100% 0; }
-  100% { background-position: 0 0; }
-}
-
 .times { display: flex; justify-content: space-between; font-size: 12px; margin-top: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
+/* ===== 下滑提示把手 ===== */
+.pull-indicator {
+  position: absolute;
+  bottom: -15px;
+  width: 40px;
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  margin: 0 auto;
+}
+.pull-indicator::after {
+  content: '下滑看原曲';
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ===== 控制鈕 ===== */
-.controls { display: flex; align-items: center; gap: 24px; margin-top: 8px; }
+.controls { display: flex; align-items: center; gap: 24px; margin-top: 12px; }
 .btn {
   width: 54px; height: 54px; display: grid; place-items: center; border-radius: 50%;
   border: 1px solid rgba(255,255,255,.1);
@@ -238,12 +323,67 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .btn:disabled { opacity: .3; }
 .btn.primary {
   width: 72px; height: 72px; font-size: 24px; color: var(--bg-dark);
-  border-color: var(--accent);
-  background: var(--accent);
+  border-color: var(--accent); background: var(--accent);
   box-shadow: 0 0 20px var(--accent-dim), inset 0 1px 2px rgba(255,255,255,.5);
 }
 
-/* ===== 點擊提示 ===== */
+/* ===== 下滑開啟的 YT 視窗 ===== */
+.yt-sheet-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,.6); backdrop-filter: blur(4px);
+  display: flex; flex-direction: column; justify-content: flex-end;
+  opacity: 0; transition: opacity 0.3s;
+}
+.yt-sheet-overlay.show {
+  opacity: 1;
+}
+.yt-sheet {
+  background: var(--panel);
+  border-top-left-radius: 24px; border-top-right-radius: 24px;
+  padding: 16px 24px 32px;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  border-top: 1px solid rgba(255,255,255,.05);
+  transform: translateY(100%);
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.yt-sheet-overlay.show .yt-sheet {
+  transform: translateY(0);
+}
+.yt-sheet-drag-handle {
+  width: 40px; height: 4px; background: rgba(255,255,255,.15); border-radius: 2px;
+  margin-bottom: 8px;
+}
+.yt-sheet h2 { font-size: 18px; color: #fff; margin-bottom: 8px; }
+
+/* 圖片與按鈕區塊 */
+.yt-link-card {
+  display: block; width: 100%; max-width: 300px;
+  text-decoration: none; text-align: center;
+  border-radius: 16px; overflow: hidden;
+  border: 1px solid var(--accent-dim);
+  background: #0a0b0f;
+  transition: transform 0.1s;
+}
+.yt-link-card:active { transform: scale(0.97); }
+.yt-img-wrapper {
+  width: 100%; height: auto; aspect-ratio: 4/3;
+  overflow: hidden;
+}
+.yt-img-wrapper img {
+  width: 100%; height: 100%; object-fit: cover;
+  transition: opacity 0.3s;
+}
+.yt-btn-text {
+  padding: 16px; font-size: 15px; font-weight: 700; color: var(--accent);
+  background: rgba(0,229,255,0.05);
+  border-top: 1px solid var(--accent-dim);
+}
+.yt-close-btn {
+  background: transparent; border: none; color: var(--text-muted);
+  font-size: 14px; cursor: pointer; padding: 8px; margin-top: 8px;
+}
+
+/* ===== 點擊提示與其他 ===== */
 .tap-prompt {
   position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
   cursor: pointer; background: rgba(5,5,8,.8); backdrop-filter: blur(4px);
@@ -255,7 +395,6 @@ body.playing .tonearm { transform: rotate(-31deg); }
 }
 @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.05); opacity: 1; } }
 
-/* ===== Toast ===== */
 .toast {
   position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom));
   transform: translateX(-50%); max-width: 88vw; padding: 12px 20px; border-radius: 12px;
@@ -264,7 +403,7 @@ body.playing .tonearm { transform: rotate(-31deg); }
   box-shadow: 0 10px 30px rgba(0,0,0,.8); z-index: 80;
 }
 
-/* ===== 歌單抽屜 ===== */
+/* 抽屜 */
 .drawer-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 50;
   display: flex; flex-direction: column; justify-content: flex-end;
@@ -301,7 +440,6 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .edit-header { text-align: center; margin-bottom: 6px; }
 .edit-header h1 { font-size: 26px; letter-spacing: .04em; color: #fff; }
 .edit-header p { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
-
 .field { display: flex; flex-direction: column; gap: 8px; }
 .field > span { font-size: 13px; color: var(--text-muted); }
 .field input, .field textarea {
@@ -311,8 +449,6 @@ body.playing .tonearm { transform: rotate(-31deg); }
 }
 .field input:focus, .field textarea:focus { border-color: var(--accent); }
 .field textarea { resize: vertical; min-height: 70px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.5; }
-
-/* 歌曲編輯卡 */
 .song-list { display: flex; flex-direction: column; gap: 14px; }
 .song-card {
   background: rgba(255,255,255,.02);
@@ -329,7 +465,6 @@ body.playing .tonearm { transform: rotate(-31deg); }
 }
 .icon-btn:disabled { opacity: .3; cursor: default; }
 .icon-btn.danger { color: #ff6b6b; border-color: rgba(255,107,107,.2); }
-
 .song-body { display: flex; flex-direction: column; gap: 14px; }
 .cover-preview {
   width: 100%; height: 120px; border-radius: 10px; background-color: rgba(0,0,0,.3);
@@ -347,8 +482,6 @@ body.playing .tonearm { transform: rotate(-31deg); }
   font-size: 16px; font-family: inherit; outline: none; min-width: 0;
 }
 .field-sm input:focus { border-color: var(--accent); }
-
-/* 按鈕 */
 .btn-block {
   width: 100%; padding: 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.08);
   background: rgba(255,255,255,.03);
@@ -361,12 +494,8 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .actions { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
 .share-box { background: rgba(0, 229, 255, 0.03); border: 1px solid var(--accent-dim); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .share-info { font-size: 12px; line-height: 1.6; color: var(--text-muted); }
-
-/* 錯誤視圖 */
 #viewError { flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
 .error-wrap { text-align: center; max-width: 380px; }
 .err { font-size: 16px; line-height: 1.8; color: #ff9e9e; margin-bottom: 24px; white-space: pre-wrap; }
 .back { font-size: 15px; color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); padding-bottom: 2px; }
-
-/* YouTube 隱藏宿主 */
 #ytHost { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
