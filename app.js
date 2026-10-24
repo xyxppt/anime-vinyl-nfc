@@ -172,7 +172,7 @@
     document.body.classList.remove('playing');
     $('tapPrompt').hidden = true;
     stopProgress();
-    $('fill').style.width = '0%';
+    $('fill').style.transform = 'scaleX(0)';
     $('cur').textContent = '0:00';
     $('dur').textContent = '0:00';
   }
@@ -300,7 +300,7 @@
   var currentIndex = 0;
   var progressTimer = null;
   var tapTimer = null;
-  var lastSec = -1; // 用於減少 DOM 操作
+  var lastSec = -1;
 
   function showPlayView(code, isPreview) {
     try {
@@ -414,7 +414,7 @@
       if (currentIndex < playlist.songs.length - 1) {
         setTimeout(function () { goToSong(currentIndex + 1); }, 700);
       } else {
-        $('fill').style.width = '100%';
+        $('fill').style.transform = 'scaleX(1)';
       }
     }
   }
@@ -434,7 +434,7 @@
     var s = playlist.songs[i];
     renderPlayMeta();
     renderDrawer();
-    $('fill').style.width = '0%';
+    $('fill').style.transform = 'scaleX(0)';
     $('cur').textContent = '0:00';
     $('dur').textContent = '0:00';
     lastSec = -1;
@@ -455,10 +455,8 @@
       var c = player.getCurrentTime();
       if (!d) return;
       
-      // 更新進度條寬度
-      $('fill').style.width = (c / d * 100) + '%';
+      $('fill').style.transform = 'scaleX(' + (c / d) + ')';
       
-      // 只有當秒數改變時，才更新文字，大幅減少 DOM 重繪
       var sec = Math.floor(c);
       if (sec !== lastSec) {
         lastSec = sec;
