@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b1210">
+<title>Anime Vinyl</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ 播放視圖 ============ -->
+<main id="viewPlay" hidden>
+  <div class="play-wrap">
+    <div class="top-bar">
+      <a class="back-link" id="backLink" href="#edit" hidden>← 編輯</a>
+      <button class="drawer-toggle" id="listToggle" type="button">☰ 歌單</button>
+    </div>
+
+    <div class="plinth">
+      <div class="vinyl">
+        <div class="label" id="label"></div>
+        <div class="spindle"></div>
+      </div>
+      <div class="sheen"></div>
+      <div class="tonearm" id="tonearm">
+        <div class="arm-base"></div>
+        <div class="arm-rod"></div>
+        <div class="arm-head"></div>
+      </div>
+    </div>
+
+    <div class="meta">
+      <p class="anime" id="anime"></p>
+      <h1 class="title" id="title"></h1>
+      <p class="artist" id="artist"></p>
+    </div>
+
+    <div class="progress">
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <div class="times">
+        <span id="cur">0:00</span>
+        <span id="dur">0:00</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="prevBtn" type="button" aria-label="上一首">⏮</button>
+      <button class="btn primary" id="playBtn" type="button" aria-label="播放／暫停">▶</button>
+      <button class="btn" id="nextBtn" type="button" aria-label="下一首">⏭</button>
+    </div>
+  </div>
+
+  <!-- 歌單抽屜 -->
+  <div class="drawer-overlay" id="playlistDrawer" hidden>
+    <div class="drawer">
+      <div class="drawer-head">
+        <h2 id="drawerTitle"></h2>
+        <button class="drawer-close" id="drawerClose" type="button">✕</button>
+      </div>
+      <div class="drawer-list" id="drawerList"></div>
+    </div>
+  </div>
+</main>
+
+<!-- ============ 編輯視圖 ============ -->
+<main id="viewEdit" hidden>
+  <div class="edit-wrap">
+    <header class="edit-header">
+      <h1>Anime Vinyl</h1>
+      <p>製作你的黑膠歌單</p>
+    </header>
+
+    <label class="field">
+      <span>歌單名稱</span>
+      <input id="playlistName" type="text" maxlength="40" placeholder="我的動漫收藏">
+    </label>
+
+    <div id="songEditorList" class="song-list"></div>
+
+    <button class="btn-block ghost" id="addSongBtn" type="button">＋ 新增歌曲</button>
+
+    <div class="actions">
+      <button class="btn-block" id="previewBtn" type="button">▶ 預覽播放</button>
+      <button class="btn-block primary" id="shareBtn" type="button">🔗 生成分享連結</button>
+    </div>
+
+    <div class="share-box" id="shareBox" hidden>
+      <label class="field">
+        <span>分享連結（只讀播放）</span>
+        <textarea id="shareUrl" readonly rows="3"></textarea>
+      </label>
+      <button class="btn-block" id="copyBtn" type="button">複製連結</button>
+      <p class="share-info" id="shareInfo"></p>
+    </div>
+  </div>
+</main>
+
+<!-- ============ 錯誤視圖 ============ -->
+<main id="viewError" hidden>
+  <div class="error-wrap">
+    <p class="err" id="errorMsg"></p>
+    <a class="back" href="#edit">← 回到編輯</a>
+  </div>
+</main>
+
+<!-- YouTube 隱藏播放器 -->
+<div id="ytHost" aria-hidden="true"></div>
+
+<!-- 點擊播放提示 -->
+<div class="tap-prompt" id="tapPrompt" hidden>
+  <span>▶ 點一下開始播放</span>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
