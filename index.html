@@ -79,6 +79,11 @@
       <button class="btn primary" id="playBtn" type="button" aria-label="播放／暫停">▶</button>
       <button class="btn" id="nextBtn" type="button" aria-label="下一首">⏭</button>
     </div>
+    <div class="extras">
+      <button class="pill" id="modeBtn" type="button" aria-label="播放模式">➡️ 順序</button>
+      <button class="pill" id="sleepBtn" type="button" aria-label="睡眠定時">😴 定時</button>
+      <button class="pill" id="themeBtn" type="button" aria-label="外觀主題">🎨 外觀</button>
+    </div>
   </div>
   <div class="drawer-overlay" id="playlistDrawer" hidden>
     <div class="drawer">
@@ -133,6 +138,11 @@
         <button class="btn-block primary" id="createPlaylistBtn" type="button">＋ 建立新歌單</button>
       </div>
       <div class="playlist-grid" id="playlistGrid"></div>
+    </div>
+
+    <div id="templateSection" hidden>
+      <h2 class="section-title">範本歌單</h2>
+      <div class="playlist-grid" id="templateList"></div>
     </div>
 
     <div id="historySection" hidden>
@@ -198,6 +208,17 @@
       <button class="btn-block ghost" id="cancelDeleteBtn">取消</button>
       <button class="btn-block danger" id="confirmDeleteBtn">確定刪除</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ 外觀主題 ============ -->
+<div class="modal-overlay" id="themeModal" hidden>
+  <div class="modal-content theme-panel">
+    <h3>🎨 外觀</h3>
+    <p class="theme-label">主題色</p><div class="swatches" id="accentSwatches"></div>
+    <p class="theme-label">唱片顏色</p><div class="swatches" id="vinylSwatches"></div>
+    <p class="theme-label">中央標籤</p><div class="seg" id="labelSeg"></div>
+    <div class="modal-actions" style="margin-top:20px"><button class="btn-block primary" id="themeDone" type="button">完成</button></div>
   </div>
 </div>
 
