@@ -324,6 +324,7 @@
     window.scrollTo(0, 0);
     var lock = id === 'viewPlay';
     document.body.classList.toggle('play-mode', lock);
+    if (!lock) stopPlayback();
     var vp = document.querySelector('meta[name="viewport"]');
     if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover' + (lock ? ', maximum-scale=1, user-scalable=no' : ''));
   }
@@ -935,6 +936,7 @@
     if ($('prevArrow')) $('prevArrow').addEventListener('click', function () { goToSong(currentIndex - 1); });
     if ($('nextArrow')) $('nextArrow').addEventListener('click', function () { goToSong(currentIndex + 1); });
     bindMediaKeys();
+    if ($('vinylPlinth')) $('vinylPlinth').addEventListener('click', function () { if ($('playBtn')) $('playBtn').click(); });
 
     if ($('prevBtn')) $('prevBtn').addEventListener('click', function () { goToSong(currentIndex - 1); });
     if ($('nextBtn')) $('nextBtn').addEventListener('click', function () { goToSong(currentIndex + 1); });
@@ -1013,6 +1015,22 @@
     document.addEventListener('touchmove', function (e) {
       if (document.body.classList.contains('play-mode') && e.touches.length > 1) e.preventDefault();
     }, { passive: false });
+  }
+
+  function bindFx() {
+    var sel = '.btn,.btn-block,.icon-btn,.btn-save,.btn-google,.drawer-toggle,.drawer-close,.drawer-item,.playlist-card,.nav-arrow,.dropdown-item';
+    document.addEventListener('pointerdown', function (e) {
+      var el = e.target.closest && e.target.closest(sel);
+      if (!el || el.disabled) return;
+      if (navigator.vibrate) { try { navigator.vibrate(8); } catch (x) {} }
+      var r = el.getBoundingClientRect();
+      var size = Math.max(r.width, r.height) * 2;
+      var d = document.createElement('span');
+      d.className = 'ripple';
+      d.style.cssText = 'width:' + size + 'px;height:' + size + 'px;left:' + (e.clientX - r.left - size / 2) + 'px;top:' + (e.clientY - r.top - size / 2) + 'px';
+      el.appendChild(d);
+      setTimeout(function () { d.remove(); }, 650);
+    });
   }
 
   function bindEditorControls() {
@@ -1393,6 +1411,7 @@
     bindSeek();
     buildEq();
     bindZoomLock();
+    bindFx();
     
     loadDraft();
     
