@@ -3,12 +3,6 @@
 
   var $ = function (id) { return document.getElementById(id); };
 
-  // ==========================================
-  // ★ 請在這裡替換成你上傳到 GitHub 的圖片網址 ★
-  // 如果保持為空字串 ''，程式會自動使用 YouTube 的縮圖
-  const customImageUrl = ''; 
-  // ==========================================
-
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -45,19 +39,6 @@
     var vid = parseVideoId(song.videoId);
     if (vid) return 'https://i.ytimg.com/vi/' + vid + '/mqdefault.jpg';
     return '';
-  }
-
-  /* ============ 初始化 EQ 柱子 ============ */
-  function initEqBars() {
-    var eqContainer = $('eqContainer');
-    if (!eqContainer) return;
-    eqContainer.innerHTML = '';
-    // 生成 30 根密集的柱子
-    for (var i = 0; i < 30; i++) {
-      var bar = document.createElement('div');
-      bar.className = 'eq-bar';
-      eqContainer.appendChild(bar);
-    }
   }
 
   /* ============ 資料層 ============ */
@@ -339,13 +320,11 @@
     $('backLink').hidden = !isPreview;
 
     currentIndex = 0;
-    initEqBars(); // 初始化等化器
     show('viewPlay');
     renderPlayMeta();
     renderDrawer();
     initYTPlayer();
     bindSwipeGestures();
-    bindYtSheetGestures();
   }
 
   function renderPlayMeta() {
@@ -360,10 +339,6 @@
     $('nextArrow').classList.toggle('disabled', currentIndex >= playlist.songs.length - 1);
     $('prevBtn').disabled = currentIndex === 0;
     $('nextBtn').disabled = currentIndex >= playlist.songs.length - 1;
-
-    var vid = parseVideoId(s.videoId);
-    $('ytLink').href = 'https://www.youtube.com/watch?v=' + vid;
-    $('sheetImage').src = customImageUrl ? customImageUrl : url;
   }
 
   function initYTPlayer() {
@@ -525,8 +500,7 @@
     show('viewError');
   }
 
-  /* ============ 手勢與事件綁定 ============ */
-  
+  /* ============ 滑動手勢切歌 ============ */
   function bindSwipeGestures() {
     var vinylPlinth = $('vinylPlinth');
     var vinyl = document.querySelector('.vinyl');
@@ -577,61 +551,6 @@
         }
       }
       startX = 0; startY = 0; isSwiping = false;
-    }, { passive: true });
-  }
-
-  function bindYtSheetGestures() {
-    var overlay = $('ytSheetOverlay');
-    var sheet = $('ytSheet');
-    var startY = 0;
-    var currentY = 0;
-    var isDragging = false;
-
-    overlay.addEventListener('click', function(e) {
-      if (e.target === overlay || e.target.id === 'ytCloseBtn') {
-        closeSheet();
-      }
-    });
-
-    sheet.addEventListener('click', function(e) {
-      e.stopPropagation();
-    });
-
-    function closeSheet() {
-      overlay.classList.remove('show');
-      setTimeout(() => { overlay.hidden = true; }, 300);
-    }
-
-    var playWrap = document.querySelector('.play-wrap');
-    playWrap.addEventListener('touchstart', function(e) {
-      startY = e.touches[0].clientY;
-      currentY = startY;
-      isDragging = false;
-    }, { passive: true });
-
-    playWrap.addEventListener('touchmove', function(e) {
-      if (!startY) return;
-      currentY = e.touches[0].clientY;
-      // 判斷往上滑 (Y 變小)
-      var diffY = currentY - startY;
-
-      if (diffY < -30) {
-        isDragging = true;
-      }
-    }, { passive: true });
-
-    playWrap.addEventListener('touchend', function(e) {
-      if (!startY) return;
-      var diffY = currentY - startY;
-      // 往上滑超過 80px 觸發
-      if (isDragging && diffY < -80) {
-        overlay.hidden = false;
-        requestAnimationFrame(() => {
-          overlay.classList.add('show');
-        });
-      }
-      startY = 0;
-      isDragging = false;
     }, { passive: true });
   }
 
