@@ -292,3 +292,21 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .playlist-card .pc-info { min-width: 0; }
 .playlist-card .pc-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hist-cover { width: 44px; height: 44px; border-radius: 8px; flex-shrink: 0; background: rgba(255,255,255,.05) center / cover no-repeat; }
+
+/* ===== 播放頁鎖定 ===== */
+body.play-mode { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; touch-action: none; }
+body.play-mode .play-wrap { gap: clamp(8px, 2dvh, 20px); }
+body.play-mode .plinth-wrapper { width: min(85vw, 340px, 36dvh); margin-top: 0; }
+.drawer-list { touch-action: pan-y; }
+
+/* ===== 可拖曳進度條 ===== */
+.seek { position: relative; padding: 10px 0; margin: -10px 0; cursor: pointer; touch-action: none; }
+.thumb { position: absolute; top: 6px; left: -6px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px var(--accent); pointer-events: none; transition: transform .15s; }
+.seek.dragging .thumb { transform: scale(1.4); }
+.seek.dragging .bar { height: 6px; margin: -1px 0; }
+
+/* ===== 音量起伏動畫(裝飾) ===== */
+.eq { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 34px; width: 100%; max-width: 330px; }
+.eq i { flex: 1; max-width: 6px; height: 100%; background: var(--accent); border-radius: 2px; opacity: .85; transform-origin: bottom; transform: scaleY(.12); animation: eqbar var(--d, 1s) ease-in-out infinite alternate; animation-delay: var(--dl, 0s); animation-play-state: paused; box-shadow: 0 0 6px var(--accent-dim); }
+body.playing .eq i { animation-play-state: running; }
+@keyframes eqbar { from { transform: scaleY(.12); } to { transform: scaleY(var(--h, 1)); } }
