@@ -1,281 +1,382 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#050508">
-<title>Anime Vinyl</title>
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Anime Vinyl">
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>黑膠唱片播放器 - 外觀設定版</title>
+    <style>
+        :root {
+            --primary-color: #333;
+            --accent-color: #e74c3c;
+            --bg-color: #f0f2f5;
+            --panel-bg: #ffffff;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            transition: background-color 0.3s;
+        }
+
+        /* 主容器 */
+        .player-container {
+            background: var(--panel-bg);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 320px;
+            position: relative;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            color: var(--text-color);
+        }
+
+        /* 唱片區域 */
+        .record-wrapper {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 30px;
+        }
+
+        .vinyl-record {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #444, #000);
+            position: relative;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.5s ease-out; /* 平滑過渡 */
+        }
+
+        /* 唱片紋理 */
+        .vinyl-record::before {
+            content: '';
+            position: absolute;
+            top: 5px; left: 5px; right: 5px; bottom: 5px;
+            border-radius: 50%;
+            border: 2px dashed rgba(255,255,255,0.1);
+        }
+
+        /* 唱片標籤 (可變色部分) */
+        .record-label {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background-color: var(--accent-color); /* 默認紅色 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            color: white;
+            font-weight: bold;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+            transition: background-color 0.2s; /* 顏色變化過渡 */
+        }
+
+        /* 旋轉動畫類 */
+        .spinning {
+            animation: spin 3s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* 控制按鈕區 */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        .btn-play {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-play:hover {
+            transform: scale(1.05);
+        }
+
+        /* 外觀設定按鈕 */
+        .btn-settings {
+            background-color: transparent;
+            border: 2px solid #ddd;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .btn-settings:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        /* --- 彈出式設定面板 (Modal) --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .settings-panel {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            width: 280px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            transform: translateY(20px);
+            transition: transform 0.3s;
+        }
+
+        .modal-overlay.active .settings-panel {
+            transform: translateY(0);
+        }
+
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .settings-header h3 {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #999;
+            padding: 0;
+        }
+
+        .setting-item {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .setting-item label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        /* 自定義顏色輸入框樣式 */
+        input[type="color"] {
+            width: 100%;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: none;
+        }
+        
+        /* 預設顏色選項 */
+        .color-presets {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .preset-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.2s;
+        }
+        
+        .preset-color:hover {
+            transform: scale(1.1);
+        }
+
+    </style>
 </head>
 <body>
 
-<!-- ============ 播放視圖 ============ -->
-<main id="viewPlay" hidden>
-  <div class="play-wrap" id="playWrap">
-    <div class="top-bar">
-      <a class="back-link" id="backLink" href="#home" hidden>← 首頁</a>
-      
-      <div class="play-top-actions">
-        <button class="drawer-toggle" id="fsBtn" type="button" hidden aria-label="全螢幕">⛶</button>
-        <button class="drawer-toggle" id="listToggle" type="button">☰ 歌單</button>
-        <button class="icon-btn danger" id="deletePlayBtn" type="button" style="margin-left: 8px; display: none;" title="刪除歌單" aria-label="刪除歌單">🗑️</button>
+    <div class="player-container">
+        <h2>Vinyl Player</h2>
         
-        <div class="user-area" style="margin-left: 10px;">
-          <button id="loginBtnPlay" class="btn-google" style="padding: 6px 12px; font-size: 12px;">登入</button>
-          <div id="userProfilePlay" class="user-profile" hidden>
-            <img id="userAvatarPlay" src="" alt="User">
-            <div id="userDropdownPlay" class="user-dropdown" hidden>
-              <div class="dropdown-header">
-                <span id="userNamePlay">載入中...</span>
-              </div>
-              <button class="dropdown-item play-logout-btn">登出</button>
+        <div class="record-wrapper">
+            <div class="vinyl-record" id="record">
+                <div class="record-label" id="recordLabel">
+                    MUSIC
+                </div>
             </div>
-          </div>
         </div>
-      </div>
-    </div>
-    
-    <div class="plinth-wrapper">
-      <button type="button" class="nav-arrow left" id="prevArrow" aria-label="上一首">❮</button>
-      <div class="plinth" id="vinylPlinth">
-        <div class="vinyl-swing">
-        <div class="vinyl">
-          <div class="label" id="label"></div>
-          <div class="spindle"></div>
-        </div>
-        </div>
-        <div class="sheen"></div>
-        <div class="tonearm" id="tonearm">
-          <div class="arm-base"></div>
-          <div class="arm-rod"></div>
-          <div class="arm-head"></div>
-        </div>
-      </div>
-      <button type="button" class="nav-arrow right" id="nextArrow" aria-label="下一首">❯</button>
-    </div>
-    <div class="meta">
-      <p class="anime" id="anime"></p>
-      <h1 class="title" id="title"></h1>
-      <p class="artist" id="artist"></p>
-    </div>
-    <div class="eq" id="eq" aria-hidden="true"></div>
-    <div class="progress-area">
-      <div class="progress">
-        <div class="seek" id="seek"><div class="bar"><div class="fill" id="fill"></div></div><div class="thumb" id="thumb"></div></div>
-        <div class="times">
-          <span id="cur">0:00</span>
-          <span id="dur">0:00</span>
-        </div>
-      </div>
-    </div>
-    <div class="controls">
-      <button class="btn" id="prevBtn" type="button" aria-label="上一首">⏮</button>
-      <button class="btn primary" id="playBtn" type="button" aria-label="播放／暫停">▶</button>
-      <button class="btn" id="nextBtn" type="button" aria-label="下一首">⏭</button>
-    </div>
-    <div class="extras">
-      <button class="pill" id="modeBtn" type="button" aria-label="播放模式">➡️ 順序</button>
-      <button class="pill" id="sleepBtn" type="button" aria-label="睡眠定時">😴 定時</button>
-      <button class="pill" id="themeBtn" type="button" aria-label="外觀主題">🎨 外觀</button>
-    </div>
-  </div>
-  <div class="drawer-overlay" id="playlistDrawer" hidden>
-    <div class="drawer">
-      <div class="drawer-head">
-        <h2 id="drawerTitle"></h2>
-        <button class="drawer-close" id="drawerClose" type="button">✕</button>
-      </div>
-      <div class="drawer-list" id="drawerList"></div>
-    </div>
-  </div>
-</main>
 
-<!-- ============ 首頁 (包含歡迎畫面與會員總覽) ============ -->
-<main id="viewHome" hidden>
-  <div class="edit-wrap">
-    <div class="edit-topbar">
-      <div class="edit-header-left">
-        <h1>Anime Vinyl</h1>
-      </div>
-      <div class="user-area" id="homeUserArea" hidden>
-        <div id="userProfile" class="user-profile" hidden>
-          <img id="userAvatar" src="" alt="User">
-          <div id="userDropdown" class="user-dropdown" hidden>
-            <div class="dropdown-header">
-              <span id="userName">載入中...</span>
-              <span id="userEmail" class="text-muted">...</span>
+        <div class="controls">
+            <button class="btn-play" id="playBtn">播放 / 暫停</button>
+        </div>
+        
+        <!-- 新增：外觀設定按鈕 -->
+        <button class="btn-settings" id="openSettingsBtn">🎨 外觀設定</button>
+    </div>
+
+    <!-- 彈出式設定面板 -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="settings-panel">
+            <div class="settings-header">
+                <h3>外觀設定</h3>
+                <button class="close-btn" id="closeSettingsBtn">&times;</button>
             </div>
-            <button id="logoutBtn" class="dropdown-item">登出</button>
-            <button id="deleteAccountBtn" class="dropdown-item danger">刪除帳號</button>
-          </div>
+            
+            <div class="setting-item">
+                <label>唱片標籤顏色</label>
+                <!-- 顏色選擇器 -->
+                <input type="color" id="colorPicker" value="#e74c3c">
+                
+                <!-- 快速預設顏色 -->
+                <div class="color-presets">
+                    <div class="preset-color" style="background: #e74c3c;" data-color="#e74c3c"></div>
+                    <div class="preset-color" style="background: #3498db;" data-color="#3498db"></div>
+                    <div class="preset-color" style="background: #2ecc71;" data-color="#2ecc71"></div>
+                    <div class="preset-color" style="background: #f1c40f;" data-color="#f1c40f"></div>
+                    <div class="preset-color" style="background: #9b59b6;" data-color="#9b59b6"></div>
+                </div>
+            </div>
+            
+            <div class="setting-item">
+                <label>背景主題</label>
+                <select id="themeSelect" style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ddd;">
+                    <option value="light">淺色模式</option>
+                    <option value="dark">深色模式</option>
+                </select>
+            </div>
         </div>
-      </div>
     </div>
 
-    <div id="guestHome" hidden>
-      <div class="guest-hero">
-        <div class="glowing-vinyl">
-          <div class="vinyl-inner"></div>
-        </div>
-      </div>
-      <h2 class="guest-title">歡迎來到 Anime Vinyl</h2>
-      <p class="guest-desc">
-        掃描海報上的 NFC 標籤，或是開啟朋友分享的連結，即可體驗專屬的復古黑膠播放器。
-      </p>
-      <button class="btn-block primary" id="guestLoginBtn" style="margin-top: 30px; font-size: 18px; padding: 18px;">
-        登入以編輯你的歌單
-      </button>
-    </div>
+    <script>
+        // 獲取元素
+        const record = document.getElementById('record');
+        const recordLabel = document.getElementById('recordLabel');
+        const playBtn = document.getElementById('playBtn');
+        
+        // 設定面板相關元素
+        const openSettingsBtn = document.getElementById('openSettingsBtn');
+        const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const colorPicker = document.getElementById('colorPicker');
+        const presetColors = document.querySelectorAll('.preset-color');
+        const themeSelect = document.getElementById('themeSelect');
 
-    <div id="memberHome" hidden>
-      <div class="list-actions">
-        <button class="btn-block primary" id="createPlaylistBtn" type="button">＋ 建立新歌單</button>
-      </div>
-      <div class="playlist-grid" id="playlistGrid"></div>
-    </div>
+        let isPlaying = false;
 
-    <div id="templateSection" hidden>
-      <h2 class="section-title">範本歌單</h2>
-      <div class="playlist-grid" id="templateList"></div>
-    </div>
+        // 播放/暫停邏輯
+        playBtn.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                record.classList.add('spinning');
+                playBtn.textContent = '暫停';
+            } else {
+                record.classList.remove('spinning');
+                playBtn.textContent = '播放';
+            }
+        });
 
-    <div id="historySection" hidden>
-      <h2 class="section-title">最近播放（分享連結 / NFC）</h2>
-      <div class="playlist-grid" id="historyList"></div>
-    </div>
-  </div>
-</main>
+        // --- 設定面板邏輯 ---
 
-<!-- ============ 編輯視圖 ============ -->
-<main id="viewEdit" hidden>
-  <div class="edit-wrap" id="editWrap">
-    <div class="edit-topbar">
-      <div class="edit-header-left">
-        <a href="#home" class="back-link" style="position:static; padding: 0;">← 首頁</a>
-      </div>
-      <div class="edit-header-right">
-        <span id="saveStatus" class="save-status"></span>
-        <button class="btn-save" id="saveBtn">儲存</button>
-        <button class="icon-btn danger" id="deleteEditBtn" type="button" title="刪除歌單" aria-label="刪除歌單" style="margin-left: 8px;">🗑️</button>
-      </div>
-    </div>
+        // 1. 打開面板
+        openSettingsBtn.addEventListener('click', () => {
+            settingsModal.classList.add('active');
+        });
 
-    <label class="field" style="margin-top: 10px;">
-      <span>歌單名稱</span>
-      <input id="playlistName" type="text" maxlength="40" placeholder="請輸入歌單名稱">
-    </label>
+        // 2. 關閉面板 (點擊 X)
+        closeSettingsBtn.addEventListener('click', () => {
+            settingsModal.classList.remove('active');
+        });
 
-    <div id="songEditorList" class="song-list"></div>
+        // 3. 關閉面板 (點擊背景遮罩)
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) {
+                settingsModal.classList.remove('active');
+            }
+        });
 
-    <button class="btn-block ghost" id="addSongBtn" type="button">＋ 新增歌曲</button>
+        // 4. 即時改變顏色 (Color Picker)
+        colorPicker.addEventListener('input', (e) => {
+            const newColor = e.target.value;
+            updateRecordColor(newColor);
+        });
 
-    <div class="actions" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
-      <button class="btn-block" id="previewBtn" type="button">▶ 預覽播放</button>
-      <button class="btn-block primary" id="shareBtn" type="button">🔗 生成分享連結</button>
-    </div>
+        // 5. 快速預設顏色點擊
+        presetColors.forEach(preset => {
+            preset.addEventListener('click', () => {
+                const color = preset.getAttribute('data-color');
+                // 同步更新 Color Picker 的值
+                colorPicker.value = color;
+                updateRecordColor(color);
+            });
+        });
 
-    <div class="share-box" id="shareBox" hidden>
-      <label class="field">
-        <span>分享連結（只讀播放）</span>
-        <textarea id="shareUrl" readonly rows="3"></textarea>
-      </label>
-      <button class="btn-block" id="copyBtn" type="button">複製連結</button>
-      <p class="share-info" id="shareInfo"></p>
-    </div>
-  </div>
-</main>
+        // 輔助函數：更新唱片顏色
+        function updateRecordColor(color) {
+            // 修改 CSS 變量或直接修改樣式
+            recordLabel.style.backgroundColor = color;
+            // 也可以稍微調整陰影顏色讓它看起來更融合
+            recordLabel.style.boxShadow = `inset 0 0 10px rgba(0,0,0,0.2), 0 0 15px ${color}40`;
+        }
 
-<!-- ============ 錯誤視圖 ============ -->
-<main id="viewError" hidden>
-  <div class="error-wrap">
-    <p class="err" id="errorMsg"></p>
-    <a class="back" href="#home">← 回到首頁</a>
-  </div>
-</main>
+        // 6. 主題切換 (簡單示範)
+        themeSelect.addEventListener('change', (e) => {
+            const theme = e.target.value;
+            if (theme === 'dark') {
+                document.body.style.backgroundColor = '#2c3e50';
+                document.querySelector('.player-container').style.backgroundColor = '#34495e';
+                document.querySelector('.player-container').style.color = '#ecf0f1';
+                document.documentElement.style.setProperty('--text-color', '#ecf0f1');
+            } else {
+                document.body.style.backgroundColor = '#f0f2f5';
+                document.querySelector('.player-container').style.backgroundColor = '#ffffff';
+                document.querySelector('.player-container').style.color = '#333';
+                document.documentElement.style.setProperty('--text-color', '#333');
+            }
+        });
 
-<!-- ============ 自訂確認彈窗 (Modal) ============ -->
-<div class="modal-overlay" id="deleteModal" hidden>
-  <div class="modal-content">
-    <h3>刪除歌單</h3>
-    <p>執行後此歌單將整個刪除無法復原，<br>確定要刪除嗎？</p>
-    <div class="modal-actions">
-      <button class="btn-block ghost" id="cancelDeleteBtn">取消</button>
-      <button class="btn-block danger" id="confirmDeleteBtn">確定刪除</button>
-    </div>
-  </div>
-</div>
-
-<!-- ============ 外觀主題 ============ -->
-<div class="modal-overlay" id="themeModal" hidden>
-  <div class="modal-content theme-panel">
-    <h3>🎨 外觀</h3>
-    <div class="theme-preview"><div class="vinyl-face"><div class="vinyl-label"></div></div></div>
-    <p class="theme-label">主題色</p>
-    <div class="swatches" id="accentSwatches"></div>
-    <div class="picker-row"><span>自訂</span><input type="color" id="accentPicker" aria-label="自訂主題色"></div>
-    <p class="theme-label">唱片顏色</p>
-    <div class="swatches" id="vinylSwatches"></div>
-    <div class="picker-row"><span>自訂</span><input type="color" id="vinylPicker" aria-label="自訂唱片顏色"></div>
-    <div class="picker-row"><span>紋路</span><input type="range" id="grooveRange" min="0" max="50" step="1" aria-label="紋路明顯度"></div>
-    <p class="theme-label">中央標籤</p>
-    <div class="seg" id="labelSeg"></div>
-    <div class="modal-actions" style="margin-top:20px">
-      <button class="btn-block ghost" id="themeReset" type="button">重設</button>
-      <button class="btn-block primary" id="themeDone" type="button">完成</button>
-    </div>
-  </div>
-</div>
-
-<!-- ============ 吃掉動畫容器 ============ -->
-<div class="eat-animation-overlay" id="eatOverlay" hidden>
-  <div class="monster" id="monster">
-    <div class="monster-eye left"></div>
-    <div class="monster-eye right"></div>
-    <div class="monster-mouth" id="monsterMouth"></div>
-  </div>
-</div>
-
-<div id="ytHost" aria-hidden="true"></div>
-<div class="tap-prompt" id="tapPrompt" hidden><span>▶ 點一下開始播放</span></div>
-<div class="toast" id="toast" hidden></div>
-
-<script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js" defer></script>
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, deleteUser, signInWithRedirect, reauthenticateWithPopup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { initializeFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyB1r6uz7hRPjZz3Ha5YJVRG28vt0B31MVo",
-    authDomain: "musicddjason.firebaseapp.com",
-    projectId: "musicddjason",
-    storageBucket: "musicddjason.firebasestorage.app",
-    messagingSenderId: "593507167093",
-    appId: "1:593507167093:web:c02484cc34d5d20432c13c",
-    measurementId: "G-WSYF3Z0BPE"
-  };
-
-  try {
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
-    const provider = new GoogleAuthProvider();
-    
-    // 加入了 onSnapshot
-    window.firebaseAuth = { auth, provider, signInWithPopup, signOut, onAuthStateChanged, deleteUser, signInWithRedirect, reauthenticateWithPopup };
-    window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc, onSnapshot };
-    
-    window.dispatchEvent(new Event('firebaseReady'));
-  } catch (e) {
-    console.error("Firebase 初始化失敗", e);
-  }
-</script>
-<script src="app.js" defer></script>
+    </script>
 </body>
 </html>
