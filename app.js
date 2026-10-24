@@ -5,8 +5,8 @@
 
   /* ============ Firebase 狀態 ============ */
   var currentUser = null;
-  var authAPI = window.firebaseAuth;
-  var dbAPI = window.firebaseDB;
+  var authAPI = null;
+  var dbAPI = null;
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -68,9 +68,7 @@
   }
 
   function saveDraft() {
-    // 1. 先存本機
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
-    // 2. 如果有登入，同步到雲端
     if (currentUser && dbAPI) {
       saveDraftToCloud();
     }
@@ -102,7 +100,6 @@
           state.songs = data.songs;
         }
       } else {
-        // 如果雲端沒資料，把本機的存上去
         await saveDraftToCloud();
       }
       $('playlistName').value = state.name;
@@ -692,7 +689,23 @@
 
   /* ============ 登入與初始化 ============ */
   function setupAuth() {
-    if (!authAPI) return;
+    // 確保 Firebase 物件有載入
+    if (!window.firebaseAuth) {
+      console.log('等待 Firebase 載入...');
+      setTimeout(setupAuth, 100);
+      return;
+    }
+    
+    authAPI = window.firebaseAuth;
+    dbAPI = window.firebaseDB;
+
+    authAPI.getRedirectResult(authAPI.auth).then(function(result) {
+      if (result && result.user) {
+        toast('登入成功！');
+      }
+    }).catch(function(error) {
+      toast('登入失敗：' + error.message);
+    });
     
     authAPI.onAuthStateChanged(authAPI.auth, function(user) {
       currentUser = user;
@@ -705,15 +718,11 @@
         logoutBtn.style.display = 'inline-block';
         userInfo.style.display = 'inline-block';
         userInfo.textContent = '👤 ' + (user.displayName || user.email).split(' ')[0];
-        
-        // 載入雲端資料
         loadDraftFromCloud();
       } else {
         loginBtn.style.display = 'inline-block';
         logoutBtn.style.display = 'none';
         userInfo.style.display = 'none';
-        
-        // 載入本機資料
         loadDraft();
         if (!state.songs.length) state.songs.push(newSong());
         $('playlistName').value = state.name;
@@ -722,8 +731,8 @@
     });
 
     $('loginBtn').addEventListener('click', function() {
-      authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(function(error) {
-        toast('登入失敗：' + error.message);
+      authAPI.signInWithRedirect(authAPI.auth, authAPI.provider).catch(function(error) {
+        toast('無法跳轉登入：' + error.message);
       });
     });
 
