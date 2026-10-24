@@ -7,6 +7,8 @@
   var currentUser = null;
   var authAPI = null;
   var dbAPI = null;
+  var cloudReady = false;
+  var playHistory = [];
   var unsubscribeSnapshot = null; // 用來取消監聽
 
   function esc(s) {
@@ -100,6 +102,7 @@
 
   async function saveDraftToCloud(silent) {
     if (!currentUser || !dbAPI) return;
+    if (!cloudReady) { if (!silent) toast('雲端尚未連線，請稍後再試'); return; }
     try {
       var docRef = dbAPI.doc(dbAPI.db, 'playlists', currentUser.uid);
       await dbAPI.setDoc(docRef, {
@@ -110,52 +113,147 @@
       if (!silent) toast('☁️ 已儲存至雲端');
     } catch (e) {
       console.error('雲端儲存失敗', e);
-      if (!silent) toast('雲端儲存失敗');
+      toast('⚠️ 雲端同步失敗：' + (e.code || e.message), 5000);
     }
   }
 
-  // 改為即時監聽雲端資料
+  function isBlankPlaylist(pl) {
+    return !(pl.songs || []).some(function (s) { return s.title || s.videoId || s.anime || s.artist; });
+  }
+
+  function mergePlaylists(local, remote) {
+    var map = {};
+    remote.forEach(function (p) { map[p.id] = p; });
+    local.forEach(function (p) {
+      if (isBlankPlaylist(p)) return;
+      var r = map[p.id];
+      if (!r || new Date(p.updatedAt) > new Date(r.updatedAt)) map[p.id] = p;
+    });
+    return Object.keys(map).map(function (k) { return map[k]; });
+  }
+
+  function applyRemote(remote, wasDirty) {
+    if (!wasDirty) { state.playlists = remote; return; }
+    var cur = getCurrentPlaylist();
+    state.playlists = remote.filter(function (p) { return !cur || p.id !== cur.id; }).concat(cur ? [cur] : []);
+  }
+
+  function mergeHistory(a, b) {
+    var m = {};
+    a.concat(b).forEach(function (h) { if (h && h.k && (!m[h.k] || h.at > m[h.k].at)) m[h.k] = h; });
+    return Object.keys(m).map(function (k) { return m[k]; })
+      .sort(function (x, y) { return y.at - x.at; }).slice(0, 30);
+  }
+
+  function refreshView(wasDirty) {
+    var hash = location.hash || '';
+    if (hash === '' || hash === '#home') {
+      renderPlaylistGrid();
+      renderHistory();
+    } else if (hash.indexOf('#edit/') === 0 && !wasDirty) {
+      var pl = getCurrentPlaylist();
+      if (pl) { $('playlistName').value = pl.name; renderEditor(); }
+    }
+  }
+
+  // 即時監聽雲端資料(首次與本機合併,之後以雲端為準)
   function listenDraftFromCloud() {
     if (!currentUser || !dbAPI) return;
-    
-    // 取消先前的監聽
     if (unsubscribeSnapshot) unsubscribeSnapshot();
-
+    cloudReady = false;
     var docRef = dbAPI.doc(dbAPI.db, 'playlists', currentUser.uid);
-    unsubscribeSnapshot = dbAPI.onSnapshot(docRef, function(docSnap) {
-      if (docSnap.exists()) {
-        var data = docSnap.data();
-        if (data && Array.isArray(data.playlists)) {
-          
-          // 如果本地正在編輯（有未儲存的變更），先不覆蓋畫面，避免打字被中斷
-          if (isDirty) return;
-          
-          // 檢查資料是否真的有變化 (避免無限迴圈)
-          var newStr = JSON.stringify(data.playlists);
-          var oldStr = JSON.stringify(state.playlists);
-          if (newStr === oldStr) return;
+    unsubscribeSnapshot = dbAPI.onSnapshot(docRef, function (snap) {
+      if (!cloudReady && snap.metadata.fromCache && !snap.exists()) return;
+      var data = snap.exists() ? snap.data() : {};
+      var remotePl = Array.isArray(data.playlists) ? data.playlists : [];
+      var remoteHist = Array.isArray(data.history) ? data.history : [];
+      var wasDirty = isDirty;
 
-          state.playlists = data.playlists;
-          saveDraft();
-          
-          // 更新畫面
-          var hash = location.hash || '';
-          if (hash === '' || hash === '#home') {
-            renderPlaylistGrid();
-          } else if (hash.startsWith('#edit/')) {
-            var pl = getCurrentPlaylist();
-            if (pl) {
-              $('playlistName').value = pl.name;
-              renderEditor();
-            }
-          }
-        }
-      } else {
-        // 雲端沒資料，把本機推上去
-        saveDraftToCloud(true);
+      if (!cloudReady) {
+        cloudReady = true;
+        state.playlists = mergePlaylists(state.playlists, remotePl);
+        playHistory = mergeHistory(playHistory, remoteHist);
+        saveDraft(); saveHistoryLocal();
+        if (JSON.stringify(state.playlists) !== JSON.stringify(remotePl)) saveDraftToCloud(true);
+        if (JSON.stringify(playHistory) !== JSON.stringify(remoteHist)) saveHistoryToCloud();
+        refreshView(wasDirty);
+        return;
       }
-    }, function(error) {
-      console.error("監聽失敗:", error);
+      if (snap.metadata.hasPendingWrites) return;
+      if (JSON.stringify(remotePl) !== JSON.stringify(state.playlists)) {
+        applyRemote(remotePl, wasDirty);
+        saveDraft();
+      }
+      if (JSON.stringify(remoteHist) !== JSON.stringify(playHistory)) {
+        playHistory = remoteHist;
+        saveHistoryLocal();
+      }
+      refreshView(wasDirty);
+    }, function (error) {
+      console.error('監聽失敗:', error);
+      toast('⚠️ 無法連線雲端：' + (error.code || error.message), 5000);
+    });
+  }
+
+  /* ============ 播放紀錄(分享連結 / NFC) ============ */
+  function loadHistory() {
+    try {
+      var a = JSON.parse(localStorage.getItem(LS_KEY + ':history'));
+      return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+  }
+
+  function saveHistoryLocal() {
+    try { localStorage.setItem(LS_KEY + ':history', JSON.stringify(playHistory)); } catch (e) {}
+  }
+
+  function saveHistoryToCloud() {
+    if (!currentUser || !dbAPI || !cloudReady) return;
+    var docRef = dbAPI.doc(dbAPI.db, 'playlists', currentUser.uid);
+    dbAPI.setDoc(docRef, { history: playHistory }, { merge: true })
+      .catch(function (e) { console.error('紀錄同步失敗', e); });
+  }
+
+  function hash32(str) {
+    var h = 5381;
+    for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }
+
+  function recordHistory(code) {
+    var vids = playlist.songs.map(function (s) { return parseVideoId(s.videoId); }).join(',');
+    var k = hash32((playlist.name || '') + '|' + vids);
+    var item = {
+      k: k, code: code, n: playlist.name || '未命名歌單', c: playlist.songs.length,
+      cv: thumbOf(playlist.songs[0]) || '', at: Date.now()
+    };
+    playHistory = [item].concat(playHistory.filter(function (h) { return h.k !== k; })).slice(0, 30);
+    saveHistoryLocal();
+    saveHistoryToCloud();
+  }
+
+  function renderHistory() {
+    var sec = $('historySection'), list = $('historyList');
+    if (!sec || !list) return;
+    sec.hidden = !playHistory.length;
+    list.innerHTML = '';
+    playHistory.forEach(function (h) {
+      var row = document.createElement('div');
+      row.className = 'playlist-card';
+      row.innerHTML =
+        '<a class="pc-left"><span class="hist-cover"></span><span class="pc-info">' +
+        '<span class="pc-title">' + esc(h.n) + '</span>' +
+        '<span class="pc-meta">' + esc(h.c) + ' 首 · ' + esc(new Date(h.at).toLocaleDateString('zh-TW')) + '</span>' +
+        '</span></a><button type="button" class="icon-btn danger" aria-label="移除紀錄">✕</button>';
+      row.querySelector('a').setAttribute('href', '#play/' + h.code);
+      if (/^https?:\/\//i.test(h.cv || '')) {
+        row.querySelector('.hist-cover').style.backgroundImage = 'url("' + h.cv.replace(/"/g, '%22') + '")';
+      }
+      row.querySelector('button').addEventListener('click', function () {
+        playHistory = playHistory.filter(function (x) { return x.k !== h.k; });
+        saveHistoryLocal(); saveHistoryToCloud(); renderHistory();
+      });
+      list.appendChild(row);
     });
   }
 
@@ -230,6 +328,7 @@
       if ($('memberHome')) $('memberHome').hidden = true;
       if ($('guestHome')) $('guestHome').hidden = false;
     }
+    renderHistory();
     show('viewHome');
   }
 
@@ -515,6 +614,7 @@
     }
 
     document.title = (playlist.name || 'Anime Vinyl') + ' — Anime Vinyl';
+    if (!isPreview && !same) recordHistory(code);
     
     if ($('backLink')) {
       $('backLink').hidden = !currentUser;
@@ -1067,6 +1167,7 @@
       state = { playlists: [] };
       isDirty = false;
       loadDraft();
+      playHistory = loadHistory();
       listenDraftFromCloud();
     } else {
       // 登出時取消監聽
@@ -1085,8 +1186,12 @@
         $('backLink').hidden = true;
       }
       
-      try { localStorage.removeItem(LS_KEY); } catch (e) {}
+      if (LS_KEY !== LS_BASE + ':guest') {
+        try { localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_KEY + ':history'); } catch (e) {}
+      }
       LS_KEY = LS_BASE + ':guest';
+      cloudReady = false;
+      playHistory = loadHistory();
       isDirty = false;
       state = { playlists: [] };
       renderPlaylistGrid();
@@ -1153,7 +1258,8 @@
 
   function setupAuthListener() {
     if (!window.firebaseAuth) return;
-    var authAPI = window.firebaseAuth;
+    authAPI = window.firebaseAuth;
+    dbAPI = window.firebaseDB;
     authAPI.onAuthStateChanged(authAPI.auth, function(user) {
       updateAuthUI(user);
       route();
@@ -1169,6 +1275,7 @@
     
     loadDraft();
     
+    playHistory = loadHistory();
     route();
     window.addEventListener('hashchange', route);
 
