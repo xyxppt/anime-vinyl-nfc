@@ -1101,9 +1101,10 @@
   var playMode = 'off';
   var SLEEP_OPTS = [0, 15, 30, 60], sleepIdx = 0, sleepAt = 0, sleepTick = null;
   var ACCENTS = [['青', '#00e5ff'], ['櫻', '#ff6fb5'], ['紫', '#a78bfa'], ['琥珀', '#ffb020'], ['薄荷', '#34d399'], ['紅蓮', '#ff4757']];
-  var VINYLS = [['經典黑', '#0d0d0d', '#151515'], ['血紅', '#3a0b10', '#561219'], ['冰藍', '#0b2a3d', '#12405c'], ['粉紅', '#3d0b2a', '#5c1240'], ['金', '#3a2c0b', '#5c4412']];
+  var VINYLS = [['經典黑', '#16161a'], ['血紅', '#7a1220'], ['冰藍', '#1c5f8a'], ['粉紅', '#a8326f'], ['金', '#8a6a1c'], ['紫', '#4b2a8a']];
   var LABELS = [['cover', '封面圖'], ['solid', '純色'], ['gradient', '漸層']];
-  var theme = { accent: 0, vinyl: 0, label: 'cover' };
+  var THEME_DEFAULT = { accent: '#00e5ff', vinyl: '#16161a', groove: 16, label: 'cover' };
+  var theme = Object.assign({}, THEME_DEFAULT);
 
   function pickNext(auto) {
     var n = playlist.songs.length;
@@ -1150,15 +1151,17 @@
     if (b) b.textContent = '😴 ' + Math.ceil(left / 60000) + ' 分';
   }
 
+  function hexRgb(h) {
+    return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  }
+
   function applyTheme() {
-    var a = ACCENTS[theme.accent][1], v = VINYLS[theme.vinyl];
-    var r = parseInt(a.slice(1, 3), 16), g = parseInt(a.slice(3, 5), 16), bl = parseInt(a.slice(5, 7), 16);
-    var st = document.documentElement.style;
-    st.setProperty('--accent', a);
-    st.setProperty('--accent-rgb', r + ',' + g + ',' + bl);
-    st.setProperty('--accent-dim', 'rgba(' + r + ',' + g + ',' + bl + ',.2)');
-    st.setProperty('--vinyl-a', v[1]);
-    st.setProperty('--vinyl-b', v[2]);
+    var c = hexRgb(theme.accent).join(','), st = document.documentElement.style;
+    st.setProperty('--accent', theme.accent);
+    st.setProperty('--accent-rgb', c);
+    st.setProperty('--accent-dim', 'rgba(' + c + ',.2)');
+    st.setProperty('--vinyl-a', theme.vinyl);
+    st.setProperty('--groove', (theme.groove / 100).toFixed(2));
     document.body.setAttribute('data-label', theme.label);
   }
 
@@ -1172,8 +1175,10 @@
       if (MODES.some(function (x) { return x[0] === m; })) playMode = m;
       var t = JSON.parse(localStorage.getItem('anime-vinyl:theme'));
       if (t) {
-        if (t.accent >= 0 && t.accent < ACCENTS.length) theme.accent = t.accent | 0;
-        if (t.vinyl >= 0 && t.vinyl < VINYLS.length) theme.vinyl = t.vinyl | 0;
+        var hex = /^#[0-9a-f]{6}$/i;
+        if (hex.test(t.accent)) theme.accent = t.accent;
+        if (hex.test(t.vinyl)) theme.vinyl = t.vinyl;
+        if (t.groove >= 0 && t.groove <= 50) theme.groove = +t.groove;
         if (LABELS.some(function (x) { return x[0] === t.label; })) theme.label = t.label;
       }
     } catch (e) {}
@@ -1202,38 +1207,51 @@
     });
     document.addEventListener('visibilitychange', function () { if (!document.hidden) tickSleep(); });
 
-    function swatches(boxId, items, key, paint) {
-      var box = $(boxId);
+    var accentBox = $('accentSwatches'), vinylBox = $('vinylSwatches'), seg = $('labelSeg');
+    var accentPick = $('accentPicker'), vinylPick = $('vinylPicker'), grooveRange = $('grooveRange');
+
+    function refreshUI() {
+      Array.prototype.forEach.call(accentBox.children, function (b) { b.classList.toggle('active', b.dataset.c === theme.accent); });
+      Array.prototype.forEach.call(vinylBox.children, function (b) { b.classList.toggle('active', b.dataset.c === theme.vinyl); });
+      Array.prototype.forEach.call(seg.children, function (b) { b.classList.toggle('active', b.dataset.k === theme.label); });
+      if (accentPick.value !== theme.accent) accentPick.value = theme.accent;
+      if (vinylPick.value !== theme.vinyl) vinylPick.value = theme.vinyl;
+      grooveRange.value = theme.groove;
+    }
+    function change() { applyTheme(); saveTheme(); refreshUI(); }
+
+    function addSwatches(box, items, key) {
       box.innerHTML = '';
-      items.forEach(function (it, i) {
+      items.forEach(function (it) {
         var b = document.createElement('button');
         b.type = 'button';
-        b.className = 'swatch' + (theme[key] === i ? ' active' : '');
+        b.className = 'swatch';
+        b.dataset.c = it[1];
         b.setAttribute('aria-label', it[0]);
-        b.style.background = paint(it);
-        b.addEventListener('click', function () {
-          theme[key] = i; applyTheme(); saveTheme();
-          Array.prototype.forEach.call(box.children, function (c, j) { c.classList.toggle('active', j === i); });
-        });
+        b.style.background = it[1];
+        b.addEventListener('click', function () { theme[key] = it[1]; change(); });
         box.appendChild(b);
       });
     }
-    swatches('accentSwatches', ACCENTS, 'accent', function (it) { return it[1]; });
-    swatches('vinylSwatches', VINYLS, 'vinyl', function (it) { return 'radial-gradient(circle, ' + it[2] + ' 30%, ' + it[1] + ' 31%, ' + it[2] + ' 60%, ' + it[1] + ' 62%)'; });
-    var seg = $('labelSeg');
+    addSwatches(accentBox, ACCENTS, 'accent');
+    addSwatches(vinylBox, VINYLS, 'vinyl');
+    seg.innerHTML = '';
     LABELS.forEach(function (it) {
       var b = document.createElement('button');
       b.type = 'button';
       b.textContent = it[1];
-      b.className = theme.label === it[0] ? 'active' : '';
-      b.addEventListener('click', function () {
-        theme.label = it[0]; applyTheme(); saveTheme();
-        Array.prototype.forEach.call(seg.children, function (c) { c.classList.toggle('active', c === b); });
-      });
+      b.dataset.k = it[0];
+      b.addEventListener('click', function () { theme.label = it[0]; change(); });
       seg.appendChild(b);
     });
+    accentPick.addEventListener('input', function () { theme.accent = accentPick.value; change(); });
+    vinylPick.addEventListener('input', function () { theme.vinyl = vinylPick.value; change(); });
+    grooveRange.addEventListener('input', function () { theme.groove = +grooveRange.value; change(); });
+    $('themeReset').addEventListener('click', function () { theme = Object.assign({}, THEME_DEFAULT); change(); });
+    refreshUI();
+
     var modal = $('themeModal');
-    $('themeBtn').addEventListener('click', function () { modal.hidden = false; });
+    $('themeBtn').addEventListener('click', function () { refreshUI(); modal.hidden = false; });
     $('themeDone').addEventListener('click', function () { modal.hidden = true; });
     modal.addEventListener('click', function (e) { if (e.target === modal) modal.hidden = true; });
   }
