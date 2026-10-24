@@ -1156,13 +1156,14 @@
   }
 
   function applyTheme() {
-    var c = hexRgb(theme.accent).join(','), st = document.documentElement.style;
-    st.setProperty('--accent', theme.accent);
+    var th = currentUser ? theme : THEME_DEFAULT;
+    var c = hexRgb(th.accent).join(','), st = document.documentElement.style;
+    st.setProperty('--accent', th.accent);
     st.setProperty('--accent-rgb', c);
     st.setProperty('--accent-dim', 'rgba(' + c + ',.2)');
-    st.setProperty('--vinyl-a', theme.vinyl);
-    st.setProperty('--groove', (theme.groove / 100).toFixed(2));
-    document.body.setAttribute('data-label', theme.label);
+    st.setProperty('--vinyl-a', th.vinyl);
+    st.setProperty('--groove', (th.groove / 100).toFixed(2));
+    document.body.setAttribute('data-label', th.label);
   }
 
   function saveTheme() {
@@ -1494,6 +1495,12 @@
 
   function updateAuthUI(user) {
     currentUser = user;
+    ['sleepBtn', 'themeBtn'].forEach(function (id) { if ($(id)) $(id).hidden = !user; });
+    if (!user) {
+      setSleep(0);
+      if ($('themeModal')) $('themeModal').hidden = true;
+    }
+    applyTheme();
     
     var loginBtns = [$('loginBtnPlay'), $('guestLoginBtn')];
     var profiles = [$('userProfile'), $('userProfilePlay')];
