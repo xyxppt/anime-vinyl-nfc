@@ -17,9 +17,6 @@
       <button class="drawer-toggle" id="listToggle" type="button">☰ 歌單</button>
     </div>
 
-    <!-- 上滑提示 -->
-    <div class="pull-hint" id="pullHint">↑ 上滑看原曲</div>
-
     <!-- 唱盤區塊 -->
     <div class="plinth-wrapper">
       <div class="nav-arrow left" id="prevArrow">❮</div>
@@ -44,13 +41,8 @@
       <p class="artist" id="artist"></p>
     </div>
 
-    <!-- 等化器與進度條區塊 -->
+    <!-- 進度條區塊 -->
     <div class="progress-area">
-      <!-- 密集的上下起伏柱子 -->
-      <div class="eq-container" id="eqContainer">
-        <!-- 這裡會由 JS 自動生成 30 根柱子 -->
-      </div>
-      
       <div class="progress">
         <div class="bar"><div class="fill" id="fill"></div></div>
         <div class="times">
@@ -75,21 +67,6 @@
         <button class="drawer-close" id="drawerClose" type="button">✕</button>
       </div>
       <div class="drawer-list" id="drawerList"></div>
-    </div>
-  </div>
-
-  <!-- 上滑開啟的原音樂網頁視窗 (Bottom Sheet) -->
-  <div class="yt-sheet-overlay" id="ytSheetOverlay" hidden>
-    <div class="yt-sheet" id="ytSheet">
-      <div class="yt-sheet-drag-handle"></div>
-      <h2>前往原音樂網站</h2>
-      <a class="yt-link-card" id="ytLink" href="#" target="_blank" rel="noopener">
-        <div class="yt-img-wrapper">
-          <img id="sheetImage" src="" alt="歌曲封面">
-        </div>
-        <div class="yt-btn-text">點我前往原音樂網站</div>
-      </a>
-      <button class="yt-close-btn" id="ytCloseBtn">關閉</button>
     </div>
   </div>
 </main>
