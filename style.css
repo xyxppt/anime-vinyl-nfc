@@ -41,11 +41,9 @@ main { width: 100%; display: flex; justify-content: center; }
 
 .plinth { position: relative; width: 100%; height: 100%; border-radius: 50%; background: linear-gradient(145deg, #161822, #0a0b0f); box-shadow: inset 0 2px 4px rgba(255,255,255,.05), inset 0 -10px 30px rgba(0,0,0,.8), 0 20px 40px rgba(0,0,0,.8), 0 0 40px var(--accent-dim); border: 1px solid rgba(255,255,255,.05); }
 .plinth::after { content: ""; position: absolute; inset: 8px; border-radius: 50%; border: 1px solid rgba(255,255,255,.03); pointer-events: none; }
-
 .vinyl { position: absolute; inset: 18px; border-radius: 50%; background: repeating-radial-gradient(circle at 50% 50%, #0d0d0d 0px, #0d0d0d 1.5px, #151515 2px, #0d0d0d 3px); box-shadow: inset 0 0 0 1px rgba(255,255,255,.05), inset 0 0 40px rgba(0,0,0,.95), 0 0 15px var(--accent-dim); animation: spin 8s linear infinite; animation-play-state: paused; will-change: transform; transform: translateZ(0); transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 body.playing .vinyl { animation-play-state: running; }
 @keyframes spin { from { transform: rotate(0deg) translateZ(0); } to { transform: rotate(360deg) translateZ(0); } }
-
 .sheen { position: absolute; inset: 18px; border-radius: 50%; pointer-events: none; background: conic-gradient(from 20deg, rgba(255,255,255,0) 0deg, rgba(0,229,255,.05) 38deg, rgba(255,255,255,0) 92deg, rgba(255,255,255,0) 190deg, rgba(255,255,255,.03) 225deg, rgba(255,255,255,0) 275deg); }
 .label { position: absolute; inset: 32%; border-radius: 50%; background-color: #1a1c29; background-size: cover; background-position: center; box-shadow: 0 0 0 2px rgba(255,255,255,.15), 0 0 0 10px rgba(0,0,0,.6), inset 0 0 20px rgba(0,0,0,.6), 0 0 20px var(--accent-dim); transform: translateZ(0); will-change: transform; backface-visibility: hidden; }
 .spindle { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #e2e8f0; box-shadow: 0 0 10px var(--accent); z-index: 3; }
@@ -95,38 +93,45 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .di-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .di-artist { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ===== 編輯視圖 (包含新版頭像選單) ===== */
-#viewEdit { flex-direction: column; align-items: center; justify-content: flex-start; }
+/* ===== 總覽與編輯視圖通用 ===== */
+#viewList, #viewEdit { flex-direction: column; align-items: center; justify-content: flex-start; }
 .edit-wrap { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
 
 .edit-topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; position: relative; }
 .edit-header-left h1 { font-size: 24px; letter-spacing: .04em; color: #fff; }
-.edit-subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
 
+/* 帳號頭像 */
 .user-area { position: relative; }
 .btn-google { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .2s; }
 .btn-google:active { background: rgba(255,255,255,.1); }
-
 .user-profile { position: relative; cursor: pointer; }
 .user-profile img { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--accent); object-fit: cover; display: block; }
-
-.user-dropdown {
-  position: absolute; top: 50px; right: 0; width: 220px;
-  background: var(--panel); border: 1px solid rgba(255,255,255,.1);
-  border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.8);
-  display: flex; flex-direction: column; overflow: hidden; z-index: 100;
-  animation: fadeInDown .2s ease-out;
-}
+.user-dropdown { position: absolute; top: 50px; right: 0; width: 220px; background: var(--panel); border: 1px solid rgba(255,255,255,.1); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.8); display: flex; flex-direction: column; overflow: hidden; z-index: 100; animation: fadeInDown .2s ease-out; }
 @keyframes fadeInDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-
 .dropdown-header { padding: 16px; background: rgba(255,255,255,.02); border-bottom: 1px solid rgba(255,255,255,.05); display: flex; flex-direction: column; gap: 4px; }
 .dropdown-header span { font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dropdown-header .text-muted { font-size: 11px; font-weight: 400; }
-
 .dropdown-item { padding: 14px 16px; background: transparent; border: none; color: var(--text-main); font-size: 14px; text-align: left; cursor: pointer; font-family: inherit; transition: background .15s; }
 .dropdown-item:hover, .dropdown-item:active { background: rgba(255,255,255,.05); }
 .dropdown-item.danger { color: var(--danger); }
 
+/* 總覽頁面卡片 */
+.list-actions { margin-top: 10px; margin-bottom: 8px; }
+.playlist-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.playlist-card { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s; text-decoration: none; color: var(--text-main); }
+.playlist-card:active { background: rgba(255,255,255,.06); }
+.pc-info { display: flex; flex-direction: column; gap: 6px; }
+.pc-title { font-size: 16px; font-weight: 700; color: #fff; }
+.pc-meta { font-size: 12px; color: var(--text-muted); }
+.pc-arrow { color: var(--text-muted); font-size: 20px; }
+
+/* 編輯頁面儲存按鈕 */
+.edit-header-right { display: flex; align-items: center; gap: 12px; }
+.save-status { font-size: 12px; color: var(--text-muted); }
+.btn-save { background: var(--accent); color: var(--bg-dark); border: none; padding: 8px 20px; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
+.btn-save:active { opacity: 0.8; }
+
+/* 表單與歌曲卡 */
 .field { display: flex; flex-direction: column; gap: 8px; }
 .field > span { font-size: 13px; color: var(--text-muted); }
 .field input, .field textarea { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 14px 16px; color: var(--text-main); font-size: 16px; font-family: inherit; outline: none; transition: border-color .15s; }
