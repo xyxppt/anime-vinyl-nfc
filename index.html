@@ -67,7 +67,7 @@
 <main id="viewEdit" hidden>
   <div class="edit-wrap">
     
-    <!-- 頂部導航列 (包含標題與帳號頭像) -->
+    <!-- 頂部導航列 -->
     <div class="edit-topbar">
       <div class="edit-header-left">
         <h1>Anime Vinyl</h1>
@@ -136,6 +136,39 @@
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+
+<!-- 將 Firebase 直接寫在這裡，確保載入完成 -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyB1r6uz7hRPjZz3Ha5YJVRG28vt0B31MVo",
+    authDomain: "musicddjason.firebaseapp.com",
+    projectId: "musicddjason",
+    storageBucket: "musicddjason.firebasestorage.app",
+    messagingSenderId: "593507167093",
+    appId: "1:593507167093:web:c02484cc34d5d20432c13c",
+    measurementId: "G-WSYF3Z0BPE"
+  };
+
+  try {
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
+    
+    window.firebaseAuth = { auth, provider, signInWithRedirect, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged, deleteUser };
+    window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc };
+    
+    // 觸發自訂事件，通知 app.js Firebase 已準備好
+    window.dispatchEvent(new Event('firebaseReady'));
+  } catch (e) {
+    console.error("Firebase 初始化失敗", e);
+  }
+</script>
+
 <script src="app.js"></script>
 </body>
 </html>
