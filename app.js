@@ -48,11 +48,25 @@
   }
 
   /* ============ 資料層 ============ */
-  var LS_KEY = 'anime-vinyl:draft';
-  var state = { name: '我的黑膠歌單', songs: [] };
+  var LS_KEY = 'anime-vinyl:data';
+  // 狀態：包含所有歌單的陣列
+  var state = { playlists: [] };
+  // 當前正在編輯的歌單 ID
+  var currentPlaylistId = null;
+  // 是否已登入
+  var isDirty = false; // 追蹤是否有未儲存的變更
 
-  function newSong() {
-    return { anime: '', title: '', artist: '', videoId: '', cover: '' };
+  function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+  }
+
+  function createEmptyPlaylist(name) {
+    return {
+      id: generateId(),
+      name: name || '新歌單',
+      songs: [{ anime: '', title: '', artist: '', videoId: '', cover: '' }],
+      updatedAt: new Date().toISOString()
+    };
   }
 
   function loadDraft() {
@@ -60,32 +74,39 @@
       var raw = localStorage.getItem(LS_KEY);
       if (raw) {
         var d = JSON.parse(raw);
-        if (d && Array.isArray(d.songs)) {
-          state.name = d.name || '我的黑膠歌單';
-          state.songs = d.songs;
+        if (d && Array.isArray(d.playlists)) {
+          state.playlists = d.playlists;
+        } else if (d && Array.isArray(d.songs)) {
+          // 相容舊版單一歌單
+          var oldPl = createEmptyPlaylist(d.name);
+          oldPl.songs = d.songs;
+          state.playlists = [oldPl];
         }
+      }
+      // 如果完全沒有資料，建立一個預設的
+      if (!state.playlists.length) {
+        state.playlists = [createEmptyPlaylist('我的第一張黑膠')];
       }
     } catch (e) {}
   }
 
   function saveDraft() {
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
-    if (currentUser && dbAPI) {
-      saveDraftToCloud();
-    }
   }
 
-  async function saveDraftToCloud() {
+  async function saveDraftToCloud(silent) {
     if (!currentUser || !dbAPI) return;
     try {
       var docRef = dbAPI.doc(dbAPI.db, 'playlists', currentUser.uid);
       await dbAPI.setDoc(docRef, {
-        name: state.name,
-        songs: state.songs,
+        playlists: state.playlists,
         updatedAt: new Date().toISOString()
       }, { merge: true });
+      
+      if (!silent) toast('☁️ 已儲存至雲端');
     } catch (e) {
       console.error('雲端儲存失敗', e);
+      if (!silent) toast('雲端儲存失敗');
     }
   }
 
@@ -96,23 +117,250 @@
       var docSnap = await dbAPI.getDoc(docRef);
       if (docSnap.exists()) {
         var data = docSnap.data();
-        if (data && Array.isArray(data.songs)) {
-          state.name = data.name || '我的黑膠歌單';
-          state.songs = data.songs;
+        if (data && Array.isArray(data.playlists)) {
+          state.playlists = data.playlists;
         }
       } else {
-        await saveDraftToCloud();
+        // 雲端沒資料，把本機推上去
+        await saveDraftToCloud(true);
       }
-      if ($('playlistName')) $('playlistName').value = state.name;
-      renderEditor();
-      toast('☁️ 雲端歌單已載入');
+      saveDraft(); // 同步存回本機
+      renderPlaylistGrid();
     } catch (e) {
       console.error('雲端載入失敗', e);
       toast('雲端載入失敗，使用本機資料');
+      renderPlaylistGrid();
     }
   }
 
-  /* ============ 歌單編碼 / 解碼 ============ */
+  /* ============ 路由 ============ */
+  function route() {
+    var hash = location.hash || '';
+
+    if (hash.indexOf('#play/') === 0) {
+      showPlayView(hash.slice(6), false);
+      return;
+    }
+    if (hash.indexOf('#preview/') === 0) {
+      showPlayView(hash.slice(9), true);
+      return;
+    }
+    if (hash.indexOf('#edit/') === 0) {
+      showEditView(hash.slice(6));
+      return;
+    }
+
+    stopPlayback();
+
+    if (hash === '#play' || hash === '#preview' || hash === '#edit') {
+      location.replace(location.pathname + location.search + '#list');
+      return;
+    }
+    showListView();
+  }
+
+  function stopPlayback() {
+    if (player && player.stopVideo) {
+      try { player.stopVideo(); } catch (e) {}
+    }
+    document.body.classList.remove('playing');
+    if ($('tapPrompt')) $('tapPrompt').hidden = true;
+    stopProgress();
+    if ($('fill')) $('fill').style.transform = 'scaleX(0)';
+    if ($('cur')) $('cur').textContent = '0:00';
+    if ($('dur')) $('dur').textContent = '0:00';
+  }
+
+  function show(id) {
+    ['viewEdit', 'viewPlay', 'viewError', 'viewList'].forEach(function (v) {
+      var el = $(v);
+      if (el) el.hidden = (v !== id);
+    });
+    window.scrollTo(0, 0);
+  }
+
+  /* ============ 總覽視圖 ============ */
+  function showListView() {
+    if (!isDirty) {
+      if (!currentUser) loadDraft();
+    }
+    renderPlaylistGrid();
+    show('viewList');
+  }
+
+  function renderPlaylistGrid() {
+    var grid = $('playlistGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    if (!state.playlists.length) {
+      grid.innerHTML = '<p style="text-align:center; color: var(--text-muted); font-size:14px; margin-top:20px;">目前沒有歌單，點擊上方新增吧！</p>';
+      return;
+    }
+
+    // 依最後修改時間排序
+    var sorted = [...state.playlists].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+    sorted.forEach(function(pl) {
+      var a = document.createElement('a');
+      a.className = 'playlist-card';
+      a.href = '#edit/' + pl.id;
+      
+      var count = (pl.songs || []).filter(s => parseVideoId(s.videoId)).length;
+      
+      a.innerHTML = 
+        '<div class="pc-info">' +
+          '<span class="pc-title">' + esc(pl.name || '未命名歌單') + '</span>' +
+          '<span class="pc-meta">' + count + ' 首歌曲</span>' +
+        '</div>' +
+        '<div class="pc-arrow">❯</div>';
+      grid.appendChild(a);
+    });
+  }
+
+  /* ============ 編輯視圖 ============ */
+  function showEditView(id) {
+    var pl = state.playlists.find(p => p.id === id);
+    if (!pl) {
+      showError('找不到該歌單');
+      return;
+    }
+    currentPlaylistId = id;
+    isDirty = false;
+    
+    if ($('playlistName')) $('playlistName').value = pl.name;
+    if ($('saveStatus')) $('saveStatus').textContent = '';
+    renderEditor();
+    show('viewEdit');
+  }
+
+  function renderEditor() {
+    var list = $('songEditorList');
+    var pl = state.playlists.find(p => p.id === currentPlaylistId);
+    if (!list || !pl) return;
+    
+    list.innerHTML = '';
+    if (!pl.songs.length) {
+      pl.songs.push({ anime: '', title: '', artist: '', videoId: '', cover: '' });
+    }
+    pl.songs.forEach(function (song, index) {
+      list.appendChild(buildSongCard(song, index));
+    });
+  }
+
+  function markDirty() {
+    isDirty = true;
+    if ($('saveStatus')) $('saveStatus').textContent = '未儲存';
+    // 每次修改也存進本機，避免重整消失
+    var pl = state.playlists.find(p => p.id === currentPlaylistId);
+    if (pl) pl.updatedAt = new Date().toISOString();
+    saveDraft();
+  }
+
+  function buildSongCard(song, index) {
+    var el = document.createElement('div');
+    el.className = 'song-card';
+
+    el.innerHTML =
+      '<div class="song-card-head">' +
+        '<span class="song-num">' + (index + 1) + '</span>' +
+        '<div class="song-card-tools">' +
+          '<button type="button" class="icon-btn" data-act="up"' + (index === 0 ? ' disabled' : '') + '>↑</button>' +
+          '<button type="button" class="icon-btn" data-act="down"' + (index === state.playlists.find(p=>p.id===currentPlaylistId).songs.length - 1 ? ' disabled' : '') + '>↓</button>' +
+          '<button type="button" class="icon-btn danger" data-act="del">✕</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="song-body">' +
+        '<div class="cover-preview" data-role="cover"></div>' +
+        '<div class="song-fields">' +
+          '<label class="field-sm"><span>動漫</span><input data-k="anime" value="' + esc(song.anime) + '" placeholder="進擊的巨人"></label>' +
+          '<label class="field-sm"><span>歌名</span><input data-k="title" value="' + esc(song.title) + '" placeholder="紅蓮の弓矢"></label>' +
+          '<label class="field-sm"><span>演唱者</span><input data-k="artist" value="' + esc(song.artist) + '" placeholder="Linked Horizon"></label>' +
+          '<label class="field-sm full"><span>YouTube 連結 / 影片 ID</span><input data-k="videoId" value="' + esc(song.videoId) + '" placeholder="https://youtu.be/... 或 11 位影片 ID"></label>' +
+          '<label class="field-sm full"><span>封面圖網址（選填）</span><input data-k="cover" value="' + esc(song.cover) + '" placeholder="留空自動使用 YouTube 縮圖"></label>' +
+        '</div>' +
+      '</div>';
+
+    var coverEl = el.querySelector('[data-role="cover"]');
+
+    function updateCover() {
+      var url = thumbOf(song);
+      if (!url) {
+        coverEl.style.backgroundImage = '';
+        coverEl.textContent = '無圖';
+        return;
+      }
+      var img = new Image();
+      img.onload = function () {
+        coverEl.style.backgroundImage = 'url("' + url + '")';
+        coverEl.textContent = '';
+      };
+      img.onerror = function () {
+        coverEl.style.backgroundImage = '';
+        coverEl.textContent = '無圖';
+      };
+      img.src = url;
+    }
+    updateCover();
+
+    el.querySelectorAll('input[data-k]').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        var k = inp.dataset.k;
+        song[k] = inp.value;
+        if (k === 'videoId' || k === 'cover') updateCover();
+        markDirty();
+      });
+      inp.addEventListener('blur', function () {
+        if (inp.dataset.k === 'videoId') {
+          var id = parseVideoId(inp.value);
+          if (id && id !== inp.value) {
+            inp.value = id;
+            song.videoId = id;
+            markDirty();
+          }
+          updateCover();
+        }
+      });
+    });
+
+    el.querySelectorAll('[data-act]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var pl = state.playlists.find(p => p.id === currentPlaylistId);
+        if (!pl) return;
+        var act = btn.dataset.act;
+        var i = pl.songs.indexOf(song);
+        
+        if (act === 'up' && i > 0) {
+          var tmp = pl.songs[i - 1];
+          pl.songs[i - 1] = pl.songs[i];
+          pl.songs[i] = tmp;
+        } else if (act === 'down' && i < pl.songs.length - 1) {
+          var tmp2 = pl.songs[i + 1];
+          pl.songs[i + 1] = pl.songs[i];
+          pl.songs[i] = tmp2;
+        } else if (act === 'del') {
+          if (pl.songs.length <= 1) {
+            toast('至少要保留一首歌');
+            return;
+          }
+          pl.songs.splice(i, 1);
+        }
+        markDirty();
+        renderEditor();
+      });
+    });
+
+    return el;
+  }
+
+  /* ============ 播放視圖 ============ */
+  var player = null;
+  var playlist = null;
+  var currentIndex = 0;
+  var progressTimer = null;
+  var tapTimer = null;
+  var lastSec = -1;
+
   function packPayload(pl) {
     var mini = {
       n: pl.name || '',
@@ -185,172 +433,6 @@
     if (!json) throw new Error('歌單資料毀損');
     return unpackPayload(JSON.parse(json));
   }
-
-  /* ============ 路由 ============ */
-  function route() {
-    var hash = location.hash || '';
-
-    if (hash.indexOf('#play/') === 0) {
-      showPlayView(hash.slice(6), false);
-      return;
-    }
-    if (hash.indexOf('#preview/') === 0) {
-      showPlayView(hash.slice(9), true);
-      return;
-    }
-
-    stopPlayback();
-
-    if (hash === '#play' || hash === '#preview') {
-      location.replace(location.pathname + location.search + '#edit');
-      return;
-    }
-    showEditView();
-  }
-
-  function stopPlayback() {
-    if (player && player.stopVideo) {
-      try { player.stopVideo(); } catch (e) {}
-    }
-    document.body.classList.remove('playing');
-    if ($('tapPrompt')) $('tapPrompt').hidden = true;
-    stopProgress();
-    if ($('fill')) $('fill').style.transform = 'scaleX(0)';
-    if ($('cur')) $('cur').textContent = '0:00';
-    if ($('dur')) $('dur').textContent = '0:00';
-  }
-
-  function show(id) {
-    ['viewEdit', 'viewPlay', 'viewError'].forEach(function (v) {
-      var el = $(v);
-      if (el) el.hidden = (v !== id);
-    });
-    window.scrollTo(0, 0);
-  }
-
-  /* ============ 編輯視圖 ============ */
-  function showEditView() {
-    if (!currentUser) {
-      loadDraft();
-      if (!state.songs.length) state.songs.push(newSong());
-      if ($('playlistName')) $('playlistName').value = state.name;
-      renderEditor();
-    }
-    show('viewEdit');
-  }
-
-  function renderEditor() {
-    var list = $('songEditorList');
-    if (!list) return;
-    list.innerHTML = '';
-    if (!state.songs.length) {
-      state.songs.push(newSong());
-    }
-    state.songs.forEach(function (song, index) {
-      list.appendChild(buildSongCard(song, index));
-    });
-  }
-
-  function buildSongCard(song, index) {
-    var el = document.createElement('div');
-    el.className = 'song-card';
-
-    el.innerHTML =
-      '<div class="song-card-head">' +
-        '<span class="song-num">' + (index + 1) + '</span>' +
-        '<div class="song-card-tools">' +
-          '<button type="button" class="icon-btn" data-act="up"' + (index === 0 ? ' disabled' : '') + '>↑</button>' +
-          '<button type="button" class="icon-btn" data-act="down"' + (index === state.songs.length - 1 ? ' disabled' : '') + '>↓</button>' +
-          '<button type="button" class="icon-btn danger" data-act="del">✕</button>' +
-        '</div>' +
-      '</div>' +
-      '<div class="song-body">' +
-        '<div class="cover-preview" data-role="cover"></div>' +
-        '<div class="song-fields">' +
-          '<label class="field-sm"><span>動漫</span><input data-k="anime" value="' + esc(song.anime) + '" placeholder="進擊的巨人"></label>' +
-          '<label class="field-sm"><span>歌名</span><input data-k="title" value="' + esc(song.title) + '" placeholder="紅蓮の弓矢"></label>' +
-          '<label class="field-sm"><span>演唱者</span><input data-k="artist" value="' + esc(song.artist) + '" placeholder="Linked Horizon"></label>' +
-          '<label class="field-sm full"><span>YouTube 連結 / 影片 ID</span><input data-k="videoId" value="' + esc(song.videoId) + '" placeholder="https://youtu.be/... 或 11 位影片 ID"></label>' +
-          '<label class="field-sm full"><span>封面圖網址（選填）</span><input data-k="cover" value="' + esc(song.cover) + '" placeholder="留空自動使用 YouTube 縮圖"></label>' +
-        '</div>' +
-      '</div>';
-
-    var coverEl = el.querySelector('[data-role="cover"]');
-
-    function updateCover() {
-      var url = thumbOf(song);
-      if (!url) {
-        coverEl.style.backgroundImage = '';
-        coverEl.textContent = '無圖';
-        return;
-      }
-      var img = new Image();
-      img.onload = function () {
-        coverEl.style.backgroundImage = 'url("' + url + '")';
-        coverEl.textContent = '';
-      };
-      img.onerror = function () {
-        coverEl.style.backgroundImage = '';
-        coverEl.textContent = '無圖';
-      };
-      img.src = url;
-    }
-    updateCover();
-
-    el.querySelectorAll('input[data-k]').forEach(function (inp) {
-      inp.addEventListener('input', function () {
-        var k = inp.dataset.k;
-        song[k] = inp.value;
-        if (k === 'videoId' || k === 'cover') updateCover();
-        saveDraft();
-      });
-      inp.addEventListener('blur', function () {
-        if (inp.dataset.k === 'videoId') {
-          var id = parseVideoId(inp.value);
-          if (id && id !== inp.value) {
-            inp.value = id;
-            song.videoId = id;
-            saveDraft();
-          }
-          updateCover();
-        }
-      });
-    });
-
-    el.querySelectorAll('[data-act]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var act = btn.dataset.act;
-        var i = state.songs.indexOf(song);
-        if (act === 'up' && i > 0) {
-          var tmp = state.songs[i - 1];
-          state.songs[i - 1] = state.songs[i];
-          state.songs[i] = tmp;
-        } else if (act === 'down' && i < state.songs.length - 1) {
-          var tmp2 = state.songs[i + 1];
-          state.songs[i + 1] = state.songs[i];
-          state.songs[i] = tmp2;
-        } else if (act === 'del') {
-          if (state.songs.length <= 1) {
-            toast('至少要保留一首歌');
-            return;
-          }
-          state.songs.splice(i, 1);
-        }
-        saveDraft();
-        renderEditor();
-      });
-    });
-
-    return el;
-  }
-
-  /* ============ 播放視圖 ============ */
-  var player = null;
-  var playlist = null;
-  var currentIndex = 0;
-  var progressTimer = null;
-  var tapTimer = null;
-  var lastSec = -1;
 
   function showPlayView(code, isPreview) {
     try {
@@ -638,29 +720,64 @@
   }
 
   function bindEditorControls() {
-    if ($('playlistName')) $('playlistName').addEventListener('input', function (e) {
-      state.name = e.target.value;
+    // 建立新歌單
+    if ($('createPlaylistBtn')) $('createPlaylistBtn').addEventListener('click', function () {
+      var newPl = createEmptyPlaylist('新歌單 ' + (state.playlists.length + 1));
+      state.playlists.push(newPl);
       saveDraft();
+      if (currentUser) saveDraftToCloud(true);
+      location.hash = '#edit/' + newPl.id;
+    });
+
+    // 編輯歌單名稱
+    if ($('playlistName')) $('playlistName').addEventListener('input', function (e) {
+      var pl = state.playlists.find(p => p.id === currentPlaylistId);
+      if (pl) {
+        pl.name = e.target.value;
+        markDirty();
+      }
+    });
+
+    // 手動儲存按鈕
+    if ($('saveBtn')) $('saveBtn').addEventListener('click', function () {
+      if (!currentUser) {
+        toast('請先登入才能儲存至雲端');
+        saveDraft(); // 還是存本機
+        if ($('saveStatus')) $('saveStatus').textContent = '已存本機';
+        return;
+      }
+      var pl = state.playlists.find(p => p.id === currentPlaylistId);
+      if (pl) pl.updatedAt = new Date().toISOString();
+      saveDraft();
+      saveDraftToCloud(false);
+      if ($('saveStatus')) $('saveStatus').textContent = '已儲存';
+      isDirty = false;
     });
 
     if ($('addSongBtn')) $('addSongBtn').addEventListener('click', function () {
-      state.songs.push(newSong());
-      saveDraft();
+      var pl = state.playlists.find(p => p.id === currentPlaylistId);
+      if (!pl) return;
+      pl.songs.push({ anime: '', title: '', artist: '', videoId: '', cover: '' });
+      markDirty();
       renderEditor();
       var cards = $('songEditorList').querySelectorAll('.song-card');
       if (cards.length) cards[cards.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
     if ($('previewBtn')) $('previewBtn').addEventListener('click', function () {
-      var valid = state.songs.filter(function (s) { return parseVideoId(s.videoId); });
+      var pl = state.playlists.find(p => p.id === currentPlaylistId);
+      if (!pl) return;
+      var valid = pl.songs.filter(function (s) { return parseVideoId(s.videoId); });
       if (!valid.length) { toast('請先新增至少一首有 YouTube 影片 ID 的歌曲'); return; }
-      location.hash = 'preview/' + encodePlaylist(state);
+      location.hash = 'preview/' + encodePlaylist(pl);
     });
 
     if ($('shareBtn')) $('shareBtn').addEventListener('click', function () {
-      var valid = state.songs.filter(function (s) { return parseVideoId(s.videoId); });
+      var pl = state.playlists.find(p => p.id === currentPlaylistId);
+      if (!pl) return;
+      var valid = pl.songs.filter(function (s) { return parseVideoId(s.videoId); });
       if (!valid.length) { toast('請先新增至少一首有 YouTube 影片 ID 的歌曲'); return; }
-      var code = encodePlaylist(state);
+      var code = encodePlaylist(pl);
       var base = location.origin + location.pathname + location.search;
       var url = base + '#play/' + code;
       if ($('shareUrl')) $('shareUrl').value = url;
@@ -711,34 +828,30 @@
       if (userName) userName.textContent = user.displayName || '使用者';
       if (userEmail) userEmail.textContent = user.email || '';
       
+      // 登入後從雲端拉取最新資料
       loadDraftFromCloud();
     } else {
       if (loginBtn) loginBtn.hidden = false;
       if (userProfile) userProfile.hidden = true;
       if (userDropdown) userDropdown.hidden = true;
       
+      // 未登入時載入本機資料
       loadDraft();
-      if (!state.songs.length) state.songs.push(newSong());
-      if ($('playlistName')) $('playlistName').value = state.name;
-      renderEditor();
+      renderPlaylistGrid();
     }
   }
 
   function bindAuthControls() {
-    // 登入按鈕 (全面改用 Popup)
     if ($('loginBtn')) $('loginBtn').addEventListener('click', function() {
       if (!window.firebaseAuth) {
         toast('登入模組載入中，請稍候再試...');
         return;
       }
-      
-      // 偵測是否是常見的社群 App 內建瀏覽器 (如 LINE, FB, IG)
       var ua = navigator.userAgent || navigator.vendor || window.opera;
       if (ua.indexOf("FBAN") > -1 || ua.indexOf("FBAV") > -1 || ua.indexOf("Line") > -1 || ua.indexOf("Instagram") > -1) {
         toast('請點擊右上角選單，選擇「使用外部瀏覽器」開啟本頁面進行登入。', 5000);
         return;
       }
-
       var authAPI = window.firebaseAuth;
       authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(function(error) {
         if (error.code === 'auth/popup-blocked') {
@@ -749,32 +862,27 @@
       });
     });
 
-    // 頭像點擊展開選單
     if ($('userProfile')) $('userProfile').addEventListener('click', function(e) {
       e.stopPropagation();
       var dropdown = $('userDropdown');
       if (dropdown) dropdown.hidden = !dropdown.hidden;
     });
 
-    // 點擊其他地方收起選單
     document.addEventListener('click', function() {
       if ($('userDropdown')) $('userDropdown').hidden = true;
     });
 
-    // 切換帳號
     if ($('switchAccountBtn')) $('switchAccountBtn').addEventListener('click', function(e) {
       e.stopPropagation();
       if ($('userDropdown')) $('userDropdown').hidden = true;
       if (!window.firebaseAuth) return;
       var authAPI = window.firebaseAuth;
-      
       authAPI.signOut(authAPI.auth).then(function() {
         authAPI.provider.setCustomParameters({ prompt: 'select_account' });
         authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(console.error);
       });
     });
 
-    // 登出
     if ($('logoutBtn')) $('logoutBtn').addEventListener('click', function(e) {
       e.stopPropagation();
       if ($('userDropdown')) $('userDropdown').hidden = true;
@@ -783,12 +891,10 @@
       toast('已登出');
     });
 
-    // 刪除帳號
     if ($('deleteAccountBtn')) $('deleteAccountBtn').addEventListener('click', function(e) {
       e.stopPropagation();
       if ($('userDropdown')) $('userDropdown').hidden = true;
-      
-      if (!confirm('確定要刪除帳號嗎？這會永久刪除你的雲端歌單，且無法復原！')) return;
+      if (!confirm('確定要刪除帳號嗎？這會永久刪除你的所有雲端歌單，且無法復原！')) return;
       
       if (currentUser && window.firebaseAuth && window.firebaseDB) {
         var authAPI = window.firebaseAuth;
@@ -799,12 +905,13 @@
           var docRef = dbAPI.doc(dbAPI.db, 'playlists', uid);
           dbAPI.deleteDoc(docRef).catch(console.error);
         }
-
         authAPI.deleteUser(currentUser).then(function() {
           toast('帳號已刪除');
           localStorage.removeItem(LS_KEY);
-          state = { name: '我的黑膠歌單', songs: [] };
-          renderEditor();
+          state = { playlists: [] };
+          loadDraft();
+          renderPlaylistGrid();
+          location.hash = '#list';
         }).catch(function(error) {
           if (error.code === 'auth/requires-recent-login') {
             toast('安全性考量，請先登出再重新登入，然後再執行刪除。', 5000);
@@ -820,7 +927,6 @@
   function setupAuthListener() {
     if (!window.firebaseAuth) return;
     var authAPI = window.firebaseAuth;
-    
     authAPI.onAuthStateChanged(authAPI.auth, function(user) {
       updateAuthUI(user);
     });
@@ -830,7 +936,11 @@
   function init() {
     bindEditorControls();
     bindPlayControls();
-    bindAuthControls(); // 先綁定登入事件
+    bindAuthControls();
+    
+    // 初始載入本機資料
+    loadDraft();
+    
     route();
     window.addEventListener('hashchange', route);
 
