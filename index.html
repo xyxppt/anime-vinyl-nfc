@@ -215,10 +215,20 @@
 <div class="modal-overlay" id="themeModal" hidden>
   <div class="modal-content theme-panel">
     <h3>🎨 外觀</h3>
-    <p class="theme-label">主題色</p><div class="swatches" id="accentSwatches"></div>
-    <p class="theme-label">唱片顏色</p><div class="swatches" id="vinylSwatches"></div>
-    <p class="theme-label">中央標籤</p><div class="seg" id="labelSeg"></div>
-    <div class="modal-actions" style="margin-top:20px"><button class="btn-block primary" id="themeDone" type="button">完成</button></div>
+    <div class="theme-preview"><div class="vinyl-face"><div class="vinyl-label"></div></div></div>
+    <p class="theme-label">主題色</p>
+    <div class="swatches" id="accentSwatches"></div>
+    <div class="picker-row"><span>自訂</span><input type="color" id="accentPicker" aria-label="自訂主題色"></div>
+    <p class="theme-label">唱片顏色</p>
+    <div class="swatches" id="vinylSwatches"></div>
+    <div class="picker-row"><span>自訂</span><input type="color" id="vinylPicker" aria-label="自訂唱片顏色"></div>
+    <div class="picker-row"><span>紋路</span><input type="range" id="grooveRange" min="0" max="50" step="1" aria-label="紋路明顯度"></div>
+    <p class="theme-label">中央標籤</p>
+    <div class="seg" id="labelSeg"></div>
+    <div class="modal-actions" style="margin-top:20px">
+      <button class="btn-block ghost" id="themeReset" type="button">重設</button>
+      <button class="btn-block primary" id="themeDone" type="button">完成</button>
+    </div>
   </div>
 </div>
 
