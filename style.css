@@ -294,7 +294,29 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .hist-cover { width: 44px; height: 44px; border-radius: 8px; flex-shrink: 0; background: rgba(255,255,255,.05) center / cover no-repeat; }
 
 /* ===== 播放頁鎖定 ===== */
-body.play-mode { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; touch-action: none; }
+body.play-mode { 
+  position: fixed; 
+  inset: 0; 
+  overflow: hidden; 
+  overscroll-behavior: none; 
+  /* 移除 touch-action: none，改為只在非互動區域限制 */
+}
+
+/* 確保播放頁內的互動元素可以正常接收觸控 */
+body.play-mode .play-wrap,
+body.play-mode .btn,
+body.play-mode .nav-arrow,
+body.play-mode .seek,
+body.play-mode .drawer-toggle,
+body.play-mode .pill {
+  touch-action: manipulation; /* 允許點擊和簡單手勢，禁止縮放 */
+}
+
+/* 背景或非互動區域才禁止觸控 */
+body.play-mode .plinth-wrapper {
+  touch-action: pan-x; /* 允許橫向滑動切歌 */
+}
+
 body.play-mode .play-wrap { gap: clamp(8px, 2dvh, 20px); }
 body.play-mode .plinth-wrapper { width: min(85vw, 340px, 36dvh); margin-top: 0; }
 .drawer-list { touch-action: pan-y; }
