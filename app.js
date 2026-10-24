@@ -42,20 +42,28 @@
   }
 
   function thumbOf(song) {
-    if (song.cover) return song.cover;
+    if (song.cover && /^https?:\/\//i.test(song.cover)) return song.cover;
     var vid = parseVideoId(song.videoId);
     if (vid) return 'https://i.ytimg.com/vi/' + vid + '/mqdefault.jpg';
     return '';
   }
 
   /* ============ 資料層 ============ */
-  var LS_KEY = 'anime-vinyl:data';
+  var LS_BASE = 'anime-vinyl:data';
+  var LS_KEY = LS_BASE + ':guest';
+  var previewFromId = null;
+  var autoSaveTimer = null;
+  var swipeBound = false;
   var state = { playlists: [] };
   var currentPlaylistId = null;
   var isDirty = false;
 
+  function getCurrentPlaylist() {
+    return state.playlists.find(function (p) { return p.id === currentPlaylistId; });
+  }
+
   function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
   function createEmptyPlaylist(name) {
@@ -135,7 +143,7 @@
           if (hash === '' || hash === '#home') {
             renderPlaylistGrid();
           } else if (hash.startsWith('#edit/')) {
-            var pl = state.playlists.find(p => p.id === currentPlaylistId);
+            var pl = getCurrentPlaylist();
             if (pl) {
               $('playlistName').value = pl.name;
               renderEditor();
@@ -154,6 +162,12 @@
   /* ============ 路由與權限控制 ============ */
   function route() {
     var hash = location.hash || '';
+
+    if (hash.indexOf('#edit/') !== 0 && isDirty) {
+      clearTimeout(autoSaveTimer);
+      if (currentUser) saveDraftToCloud(true);
+      isDirty = false;
+    }
 
     if (hash.indexOf('#play/') === 0) {
       showPlayView(hash.slice(6), false);
@@ -271,7 +285,7 @@
 
   function renderEditor() {
     var list = $('songEditorList');
-    var pl = state.playlists.find(p => p.id === currentPlaylistId);
+    var pl = getCurrentPlaylist();
     if (!list || !pl) return;
     
     list.innerHTML = '';
@@ -286,9 +300,16 @@
   function markDirty() {
     isDirty = true;
     if ($('saveStatus')) $('saveStatus').textContent = '未儲存';
-    var pl = state.playlists.find(p => p.id === currentPlaylistId);
+    var pl = getCurrentPlaylist();
     if (pl) pl.updatedAt = new Date().toISOString();
     saveDraft();
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(function () {
+      if (!currentUser || !isDirty) return;
+      isDirty = false;
+      saveDraftToCloud(true);
+      if ($('saveStatus')) $('saveStatus').textContent = '已自動儲存';
+    }, 1500);
   }
 
   function buildSongCard(song, index) {
@@ -300,7 +321,7 @@
         '<span class="song-num">' + (index + 1) + '</span>' +
         '<div class="song-card-tools">' +
           '<button type="button" class="icon-btn" data-act="up"' + (index === 0 ? ' disabled' : '') + '>↑</button>' +
-          '<button type="button" class="icon-btn" data-act="down"' + (index === state.playlists.find(p=>p.id===currentPlaylistId).songs.length - 1 ? ' disabled' : '') + '>↓</button>' +
+          '<button type="button" class="icon-btn" data-act="down"' + (index === getCurrentPlaylist().songs.length - 1 ? ' disabled' : '') + '>↓</button>' +
           '<button type="button" class="icon-btn danger" data-act="del">✕</button>' +
         '</div>' +
       '</div>' +
@@ -316,6 +337,7 @@
       '</div>';
 
     var coverEl = el.querySelector('[data-role="cover"]');
+    var coverTimer = null;
 
     function updateCover() {
       var url = thumbOf(song);
@@ -341,7 +363,7 @@
       inp.addEventListener('input', function () {
         var k = inp.dataset.k;
         song[k] = inp.value;
-        if (k === 'videoId' || k === 'cover') updateCover();
+        if (k === 'videoId' || k === 'cover') { clearTimeout(coverTimer); coverTimer = setTimeout(updateCover, 300); }
         markDirty();
       });
       inp.addEventListener('blur', function () {
@@ -359,7 +381,7 @@
 
     el.querySelectorAll('[data-act]').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var pl = state.playlists.find(p => p.id === currentPlaylistId);
+        var pl = getCurrentPlaylist();
         if (!pl) return;
         var act = btn.dataset.act;
         var i = pl.songs.indexOf(song);
@@ -428,14 +450,17 @@
   }
 
   function b64urlEncode(str) {
-    return btoa(unescape(encodeURIComponent(str)))
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    var bin = '';
+    new TextEncoder().encode(str).forEach(function (c) { bin += String.fromCharCode(c); });
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 
   function b64urlDecode(str) {
     var s = str.replace(/-/g, '+').replace(/_/g, '/');
     while (s.length % 4) s += '=';
-    return decodeURIComponent(escape(atob(s)));
+    var bin = atob(s), u = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(u);
   }
 
   function encodePlaylist(pl) {
@@ -470,6 +495,8 @@
   }
 
   function showPlayView(code, isPreview) {
+    if (!isPreview) previewFromId = null;
+    var same = !!player && code === currentPlayCode && !$('viewPlay').hidden;
     try {
       playlist = decodePlaylist(code);
       currentPlayCode = code;
@@ -491,18 +518,42 @@
     
     if ($('backLink')) {
       $('backLink').hidden = !currentUser;
+      var toEdit = isPreview && previewFromId;
+      $('backLink').href = toEdit ? '#edit/' + previewFromId : '#home';
+      $('backLink').textContent = toEdit ? '← 返回編輯' : '← 首頁';
     }
     
     if ($('deletePlayBtn')) {
-      $('deletePlayBtn').style.display = (isPreview && currentUser) ? 'grid' : 'none';
+      $('deletePlayBtn').style.display = (isPreview && currentUser && previewFromId) ? 'grid' : 'none';
     }
 
-    currentIndex = 0;
+    if (!same) currentIndex = 0;
     show('viewPlay');
     renderPlayMeta();
     renderDrawer();
-    initYTPlayer();
+    if (!same) initYTPlayer();
     bindSwipeGestures();
+  }
+
+  function updateMediaSession() {
+    if (!('mediaSession' in navigator) || !window.MediaMetadata || !playlist) return;
+    var s = playlist.songs[currentIndex];
+    var u = thumbOf(s);
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: s.title || '未命名歌曲', artist: s.artist || '', album: s.anime || '',
+      artwork: u ? [{ src: u }] : []
+    });
+  }
+
+  function bindMediaKeys() {
+    if (!('mediaSession' in navigator)) return;
+    var h = {
+      play: function () { if (player && player.playVideo) player.playVideo(); },
+      pause: function () { if (player && player.pauseVideo) player.pauseVideo(); },
+      previoustrack: function () { goToSong(currentIndex - 1); },
+      nexttrack: function () { goToSong(currentIndex + 1); }
+    };
+    Object.keys(h).forEach(function (k) { try { navigator.mediaSession.setActionHandler(k, h[k]); } catch (e) {} });
   }
 
   function renderPlayMeta() {
@@ -513,6 +564,7 @@
     var url = thumbOf(s);
     if ($('label')) $('label').style.backgroundImage = url ? 'url("' + url + '")' : '';
     
+    updateMediaSession();
     if ($('prevArrow')) $('prevArrow').classList.toggle('disabled', currentIndex === 0);
     if ($('nextArrow')) $('nextArrow').classList.toggle('disabled', currentIndex >= playlist.songs.length - 1);
     if ($('prevBtn')) $('prevBtn').disabled = currentIndex === 0;
@@ -630,19 +682,20 @@
   function startProgress() {
     stopProgress();
     lastSec = -1;
+    var fillEl = $('fill'), curEl = $('cur'), durEl = $('dur');
     progressTimer = setInterval(function () {
       if (!player || !player.getDuration) return;
       var d = player.getDuration();
       var c = player.getCurrentTime();
       if (!d) return;
       
-      if ($('fill')) $('fill').style.transform = 'scaleX(' + (c / d) + ')';
+      fillEl.style.transform = 'scaleX(' + (c / d) + ')';
       
       var sec = Math.floor(c);
       if (sec !== lastSec) {
         lastSec = sec;
-        if ($('cur')) $('cur').textContent = fmtTime(c);
-        if ($('dur')) $('dur').textContent = fmtTime(d);
+        curEl.textContent = fmtTime(c);
+        durEl.textContent = fmtTime(d);
       }
     }, 250);
   }
@@ -665,9 +718,10 @@
       btn.className = 'drawer-item' + (i === currentIndex ? ' active' : '');
       var url = thumbOf(s);
       btn.innerHTML =
-        '<span class="di-cover"' + (url ? ' style="background-image:url(\'' + url + '\')"' : '') + '></span>' +
+        '<span class="di-cover"></span>' +
         '<span class="di-info"><span class="di-title">' + esc(s.title || '未命名') + '</span>' +
         '<span class="di-artist">' + esc(s.artist || s.anime || '') + '</span></span>';
+      if (url) btn.querySelector('.di-cover').style.backgroundImage = 'url("' + url.replace(/"/g, '%22') + '")';
       btn.addEventListener('click', function () {
         goToSong(i);
         if ($('playlistDrawer')) $('playlistDrawer').hidden = true;
@@ -684,18 +738,13 @@
   /* ============ 手勢與控制 ============ */
   function bindSwipeGestures() {
     var vinylPlinth = $('vinylPlinth');
-    var vinyl = document.querySelector('.vinyl');
-    if (!vinylPlinth || !vinyl) return;
+    var vinyl = document.querySelector('.vinyl-swing');
+    if (swipeBound || !vinylPlinth || !vinyl) return;
+    swipeBound = true;
 
-    if ($('prevArrow')) $('prevArrow').addEventListener('click', function() { goToSong(currentIndex - 1); });
-    if ($('nextArrow')) $('nextArrow').addEventListener('click', function() { goToSong(currentIndex + 1); });
 
     var startX = 0, startY = 0, isSwiping = false;
 
-    var newPlinth = vinylPlinth.cloneNode(true);
-    vinylPlinth.parentNode.replaceChild(newPlinth, vinylPlinth);
-    vinylPlinth = newPlinth;
-    vinyl = vinylPlinth.querySelector('.vinyl');
 
     vinylPlinth.addEventListener('touchstart', function (e) {
       startX = e.touches[0].clientX;
@@ -744,6 +793,10 @@
       else player.playVideo();
     });
 
+    if ($('prevArrow')) $('prevArrow').addEventListener('click', function () { goToSong(currentIndex - 1); });
+    if ($('nextArrow')) $('nextArrow').addEventListener('click', function () { goToSong(currentIndex + 1); });
+    bindMediaKeys();
+
     if ($('prevBtn')) $('prevBtn').addEventListener('click', function () { goToSong(currentIndex - 1); });
     if ($('nextBtn')) $('nextBtn').addEventListener('click', function () { goToSong(currentIndex + 1); });
 
@@ -773,7 +826,7 @@
     });
 
     if ($('playlistName')) $('playlistName').addEventListener('input', function (e) {
-      var pl = state.playlists.find(p => p.id === currentPlaylistId);
+      var pl = getCurrentPlaylist();
       if (pl) {
         pl.name = e.target.value;
         markDirty();
@@ -785,16 +838,17 @@
         toast('請先登入才能儲存至雲端');
         return;
       }
-      var pl = state.playlists.find(p => p.id === currentPlaylistId);
+      var pl = getCurrentPlaylist();
       if (pl) pl.updatedAt = new Date().toISOString();
       saveDraft();
+      clearTimeout(autoSaveTimer);
       saveDraftToCloud(false);
       if ($('saveStatus')) $('saveStatus').textContent = '已儲存';
       isDirty = false;
     });
 
     if ($('addSongBtn')) $('addSongBtn').addEventListener('click', function () {
-      var pl = state.playlists.find(p => p.id === currentPlaylistId);
+      var pl = getCurrentPlaylist();
       if (!pl) return;
       pl.songs.push({ anime: '', title: '', artist: '', videoId: '', cover: '' });
       markDirty();
@@ -804,15 +858,16 @@
     });
 
     if ($('previewBtn')) $('previewBtn').addEventListener('click', function () {
-      var pl = state.playlists.find(p => p.id === currentPlaylistId);
+      var pl = getCurrentPlaylist();
       if (!pl) return;
       var valid = pl.songs.filter(function (s) { return parseVideoId(s.videoId); });
       if (!valid.length) { toast('請先新增至少一首有 YouTube 影片 ID 的歌曲'); return; }
+      previewFromId = currentPlaylistId;
       location.hash = 'preview/' + encodePlaylist(pl);
     });
 
     if ($('shareBtn')) $('shareBtn').addEventListener('click', function () {
-      var pl = state.playlists.find(p => p.id === currentPlaylistId);
+      var pl = getCurrentPlaylist();
       if (!pl) return;
       var valid = pl.songs.filter(function (s) { return parseVideoId(s.videoId); });
       if (!valid.length) { toast('請先新增至少一首有 YouTube 影片 ID 的歌曲'); return; }
@@ -939,7 +994,7 @@
     if ($('deletePlayBtn')) {
       $('deletePlayBtn').addEventListener('click', function() {
         if (currentUser && state.playlists.length > 0) {
-          var matchedPl = state.playlists.find(p => p.name === playlist.name);
+          var matchedPl = state.playlists.find(p => p.id === previewFromId);
           if (matchedPl) {
             openDeleteModal(matchedPl.id, 'play');
           } else {
@@ -967,7 +1022,7 @@
     var authAPI = window.firebaseAuth;
     authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(function(error) {
       if (error.code === 'auth/popup-blocked') {
-        toast('彈出視窗被阻擋，請允許本站顯示彈出視窗後重試。');
+        authAPI.signInWithRedirect(authAPI.auth, authAPI.provider);
       } else if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
         toast('登入失敗：' + error.message);
       }
@@ -976,7 +1031,9 @@
 
   function triggerLogout() {
     if (!window.firebaseAuth) return;
-    window.firebaseAuth.signOut(window.firebaseAuth.auth);
+    clearTimeout(autoSaveTimer);
+    var pending = (isDirty && currentUser) ? saveDraftToCloud(true) : Promise.resolve();
+    pending.then(function () { window.firebaseAuth.signOut(window.firebaseAuth.auth); });
     toast('已登出');
     location.hash = '#home';
   }
@@ -1006,7 +1063,10 @@
       
       if ($('backLink')) $('backLink').hidden = false;
       
-      // 啟動即時監聽
+      LS_KEY = LS_BASE + ':' + user.uid;
+      state = { playlists: [] };
+      isDirty = false;
+      loadDraft();
       listenDraftFromCloud();
     } else {
       // 登出時取消監聽
@@ -1025,6 +1085,9 @@
         $('backLink').hidden = true;
       }
       
+      try { localStorage.removeItem(LS_KEY); } catch (e) {}
+      LS_KEY = LS_BASE + ':guest';
+      isDirty = false;
       state = { playlists: [] };
       renderPlaylistGrid();
     }
@@ -1067,22 +1130,23 @@
         var dbAPI = window.firebaseDB;
         var uid = currentUser.uid;
         
-        if (dbAPI) {
-          var docRef = dbAPI.doc(dbAPI.db, 'playlists', uid);
-          dbAPI.deleteDoc(docRef).catch(console.error);
-        }
-        authAPI.deleteUser(currentUser).then(function() {
-          toast('帳號已刪除');
-          localStorage.removeItem(LS_KEY);
-          triggerLogout();
-        }).catch(function(error) {
-          if (error.code === 'auth/requires-recent-login') {
-            toast('安全性考量，請先登出再重新登入，然後再執行刪除。', 5000);
-            triggerLogout();
-          } else {
-            toast('刪除失敗：' + error.message);
-          }
-        });
+        if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+        clearTimeout(autoSaveTimer);
+        var docRef = dbAPI.doc(dbAPI.db, 'playlists', uid);
+        authAPI.reauthenticateWithPopup(currentUser, authAPI.provider)
+          .then(function () { return dbAPI.deleteDoc(docRef); })
+          .then(function () { return authAPI.deleteUser(currentUser); })
+          .then(function () {
+            toast('帳號已刪除');
+            try { localStorage.removeItem(LS_KEY); } catch (e) {}
+            location.hash = '#home';
+          })
+          .catch(function (error) {
+            listenDraftFromCloud();
+            if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+              toast('刪除失敗：' + error.message);
+            }
+          });
       }
     });
   }
