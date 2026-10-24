@@ -285,3 +285,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* ===== 播放紀錄 ===== */
+.section-title { font-size: 14px; color: var(--text-muted); font-weight: 600; letter-spacing: .08em; margin: 24px 0 12px; }
+.playlist-card .pc-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-decoration: none; color: inherit; cursor: pointer; }
+.playlist-card .pc-info { min-width: 0; }
+.playlist-card .pc-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-cover { width: 44px; height: 44px; border-radius: 8px; flex-shrink: 0; background: rgba(255,255,255,.05) center / cover no-repeat; }
