@@ -156,10 +156,11 @@
     } else if (hash.indexOf('#edit/') === 0 && !wasDirty) {
       var pl = getCurrentPlaylist();
       if (pl) { $('playlistName').value = pl.name; renderEditor(); }
+    } else if (hash === '#nfc') {
+      showNfcView();
     }
   }
 
-  // 即時監聽雲端資料
   function listenDraftFromCloud() {
     if (!currentUser || !dbAPI) return;
     if (unsubscribeSnapshot) unsubscribeSnapshot();
@@ -270,6 +271,11 @@
       isDirty = false;
     }
 
+    if (hash === '#nfc') {
+      showNfcView();
+      return;
+    }
+
     if (hash.indexOf('#play/') === 0) {
       showPlayView(hash.slice(6), false);
       return;
@@ -317,7 +323,7 @@
   }
 
   function show(id) {
-    ['viewEdit', 'viewPlay', 'viewError', 'viewHome'].forEach(function (v) {
+    ['viewEdit', 'viewPlay', 'viewError', 'viewHome', 'viewNfc'].forEach(function (v) {
       var el = $(v);
       if (el) el.hidden = (v !== id);
     });
@@ -372,6 +378,135 @@
         '<div class="pc-arrow">❯</div>';
       grid.appendChild(a);
     });
+  }
+
+  /* ============ NFC 專屬視圖邏輯 ============ */
+  function showNfcView() {
+    show('viewNfc');
+    
+    var isSupported = 'NDEFReader' in window;
+    
+    if (!isSupported) {
+      if ($('nfcUnsupported')) $('nfcUnsupported').hidden = false;
+      if ($('nfcSupported')) $('nfcSupported').hidden = true;
+      return;
+    }
+    
+    if ($('nfcUnsupported')) $('nfcUnsupported').hidden = true;
+    if ($('nfcSupported')) $('nfcSupported').hidden = false;
+    if ($('nfcStatusText')) $('nfcStatusText').textContent = '請選擇要寫入的歌單，並準備好 NFC 標籤';
+    
+    var select = $('nfcPlaylistSelect');
+    if (!select) return;
+    select.innerHTML = '';
+    
+    if (!state.playlists || state.playlists.length === 0) {
+      select.innerHTML = '<option value="">目前沒有可用歌單</option>';
+      if ($('executeNfcWriteBtn')) $('executeNfcWriteBtn').disabled = true;
+      return;
+    }
+    
+    if ($('executeNfcWriteBtn')) $('executeNfcWriteBtn').disabled = false;
+    state.playlists.forEach(function (pl) {
+      var opt = document.createElement('option');
+      opt.value = pl.id;
+      opt.textContent = pl.name || '未命名歌單';
+      select.appendChild(opt);
+    });
+  }
+
+  async function handleNfcWriteProcess() {
+    var selectEl = $('nfcPlaylistSelect');
+    if (!selectEl) return;
+    var selectId = selectEl.value;
+    var pl = state.playlists.find(function (p) { return p.id === selectId; });
+    if (!pl) {
+      toast('請選擇有效的歌單');
+      return;
+    }
+    
+    var base = location.origin + location.pathname + location.search;
+    var targetUrl = '';
+    
+    if (pl.shareId && currentUser && dbAPI && cloudReady) {
+      targetUrl = base + '#s/' + pl.shareId;
+    } else {
+      targetUrl = base + '#play/' + encodePlaylist(pl);
+    }
+
+    try {
+      var ndef = new NDEFReader();
+      var statusText = $('nfcStatusText');
+      
+      if (statusText) statusText.textContent = '🔍 請將 NFC 標籤靠近手機感應處以檢查標籤...';
+      toast('請將手機靠近 NFC 標籤');
+
+      var hasExistingData = await new Promise(function (resolve) {
+        var timeout = setTimeout(function () {
+          resolve(false);
+        }, 4000);
+
+        try {
+          ndef.scan().then(function() {
+            ndef.onreading = function (event) {
+              clearTimeout(timeout);
+              var records = event.message.records;
+              resolve(records && records.length > 0);
+            };
+          }).catch(function() {
+            clearTimeout(timeout);
+            resolve(false);
+          });
+        } catch (e) {
+          clearTimeout(timeout);
+          resolve(false);
+        }
+      });
+
+      if (hasExistingData) {
+        var confirmOverwrite = confirm('偵測到此 NFC 標籤內已有其他資料！\n是否要清除並覆蓋寫入目前的歌單？\n（按下「取消」將會退出）');
+        if (!confirmOverwrite) {
+          if (statusText) statusText.textContent = '已取消寫入操作';
+          toast('已取消寫入');
+          return;
+        }
+      }
+
+      if (statusText) statusText.textContent = '📡 偵測到 NFC 標籤！請保持貼緊，正在寫入...';
+      
+      await ndef.write({
+        records: [{ recordType: "url", data: targetUrl }]
+      });
+
+      if (statusText) statusText.textContent = '🎉 寫入成功！您可以將標籤移開了。';
+      toast('NFC 標籤寫入成功！');
+
+    } catch (error) {
+      console.error('NFC 寫入失敗:', error);
+      if ($('nfcStatusText')) $('nfcStatusText').textContent = '❌ 寫入失敗，請重試';
+      
+      if (error.name === 'NotAllowedError') {
+        toast('權限被拒絕，請允許 NFC 權限');
+      } else if (error.name === 'NotSupportedError' || (error.message && error.message.includes('full'))) {
+        toast('寫入失敗：NFC 標籤容量不足，無法容納此歌單');
+      } else {
+        toast('寫入失敗：' + error.message);
+      }
+    }
+  }
+
+  function bindNfcControls() {
+    if ($('goToNfcBtn')) {
+      $('goToNfcBtn').addEventListener('click', function () {
+        location.hash = '#nfc';
+      });
+    }
+
+    if ($('executeNfcWriteBtn')) {
+      $('executeNfcWriteBtn').addEventListener('click', function () {
+        handleNfcWriteProcess();
+      });
+    }
   }
 
   /* ============ 編輯視圖 ============ */
@@ -714,7 +849,6 @@
     if (!s) return;
     var vid = parseVideoId(s.videoId);
 
-    // 如果 Player 已存在且可用，直接載入新影片
     if (player && player.loadVideoById) {
       try {
         player.loadVideoById(vid);
@@ -726,7 +860,6 @@
       return;
     }
 
-    // 如果 API 還沒載入
     if (!ytApiReady) {
       if (!window._ytLoading) {
         window._ytLoading = true;
@@ -734,7 +867,6 @@
         tag.src = 'https://www.youtube.com/iframe_api';
         document.head.appendChild(tag);
       }
-      // 等待 API Ready
       window.onYouTubeIframeAPIReady = function () {
         window._ytLoading = false;
         ytApiReady = true;
@@ -743,7 +875,6 @@
       return;
     }
 
-    // API 已載入但 Player 未建立
     createYTPlayer(vid);
   }
 
@@ -755,7 +886,6 @@
   }
 
   function createYTPlayer(videoId) {
-    // 確保容器存在
     var host = $('ytHost');
     if (!host) return;
 
@@ -838,7 +968,6 @@
     lastSec = -1;
     var vid = parseVideoId(s.videoId);
     
-    // 優先嘗試載入，失敗則重建
     if (player && player.loadVideoById) {
       try {
         player.loadVideoById(vid);
@@ -1588,7 +1717,6 @@
       playHistory = loadHistory();
       listenDraftFromCloud();
     } else {
-      // 登出時取消監聽
       if (unsubscribeSnapshot) {
         unsubscribeSnapshot();
         unsubscribeSnapshot = null;
@@ -1695,6 +1823,7 @@
     bindPlayControls();
     bindAuthControls();
     bindDeleteControls();
+    bindNfcControls();
     bindSeek();
     buildEq();
     bindZoomLock();
