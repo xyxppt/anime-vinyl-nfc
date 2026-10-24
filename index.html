@@ -13,7 +13,7 @@
 <main id="viewPlay" hidden>
   <div class="play-wrap">
     <div class="top-bar">
-      <a class="back-link" id="backLink" href="#edit" hidden>← 編輯</a>
+      <a class="back-link" id="backLink" href="#list" hidden>← 返回</a>
       <button class="drawer-toggle" id="listToggle" type="button">☰ 歌單</button>
     </div>
     <div class="plinth-wrapper">
@@ -63,24 +63,19 @@
   </div>
 </main>
 
-<!-- ============ 編輯視圖 ============ -->
-<main id="viewEdit" hidden>
+<!-- ============ 歌單總覽視圖 ============ -->
+<main id="viewList" hidden>
   <div class="edit-wrap">
-    
     <!-- 頂部導航列 -->
     <div class="edit-topbar">
       <div class="edit-header-left">
-        <h1>Anime Vinyl</h1>
+        <h1>我的歌單</h1>
       </div>
-      
       <div class="user-area">
-        <!-- 未登入狀態 -->
         <button id="loginBtn" class="btn-google">
           <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
           登入
         </button>
-        
-        <!-- 已登入狀態 -->
         <div id="userProfile" class="user-profile" hidden>
           <img id="userAvatar" src="" alt="User">
           <div id="userDropdown" class="user-dropdown" hidden>
@@ -96,18 +91,40 @@
       </div>
     </div>
 
-    <p class="edit-subtitle">製作你的黑膠歌單</p>
+    <div class="list-actions">
+      <button class="btn-block primary" id="createPlaylistBtn" type="button">＋ 建立新歌單</button>
+    </div>
+
+    <!-- 歌單列表 -->
+    <div class="playlist-grid" id="playlistGrid">
+      <!-- 由 JS 渲染 -->
+    </div>
+  </div>
+</main>
+
+<!-- ============ 編輯視圖 ============ -->
+<main id="viewEdit" hidden>
+  <div class="edit-wrap">
+    <div class="edit-topbar">
+      <div class="edit-header-left">
+        <a href="#list" class="back-link" style="position:static; padding: 0;">← 返回</a>
+      </div>
+      <div class="edit-header-right">
+        <span id="saveStatus" class="save-status"></span>
+        <button class="btn-save" id="saveBtn">儲存</button>
+      </div>
+    </div>
 
     <label class="field" style="margin-top: 10px;">
       <span>歌單名稱</span>
-      <input id="playlistName" type="text" maxlength="40" placeholder="我的動漫收藏">
+      <input id="playlistName" type="text" maxlength="40" placeholder="請輸入歌單名稱">
     </label>
 
     <div id="songEditorList" class="song-list"></div>
 
     <button class="btn-block ghost" id="addSongBtn" type="button">＋ 新增歌曲</button>
 
-    <div class="actions">
+    <div class="actions" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
       <button class="btn-block" id="previewBtn" type="button">▶ 預覽播放</button>
       <button class="btn-block primary" id="shareBtn" type="button">🔗 生成分享連結</button>
     </div>
@@ -127,7 +144,7 @@
 <main id="viewError" hidden>
   <div class="error-wrap">
     <p class="err" id="errorMsg"></p>
-    <a class="back" href="#edit">← 回到編輯</a>
+    <a class="back" href="#list">← 回到首頁</a>
   </div>
 </main>
 
@@ -136,11 +153,9 @@
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
-
-<!-- 將 Firebase 直接寫在這裡，確保載入完成 -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -159,8 +174,7 @@
     const db = getFirestore(app);
     const provider = new GoogleAuthProvider();
     
-    // 只保留 signInWithPopup 供登入使用
-    window.firebaseAuth = { auth, provider, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged, deleteUser };
+    window.firebaseAuth = { auth, provider, signInWithPopup, signOut, onAuthStateChanged, deleteUser };
     window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc };
     
     window.dispatchEvent(new Event('firebaseReady'));
@@ -168,7 +182,6 @@
     console.error("Firebase 初始化失敗", e);
   }
 </script>
-
 <script src="app.js"></script>
 </body>
 </html>
