@@ -8,6 +8,7 @@
   var authAPI = null;
   var dbAPI = null;
   var cloudReady = false;
+  var seeking = false;
   var playHistory = [];
   var unsubscribeSnapshot = null; // 用來取消監聽
 
@@ -110,6 +111,8 @@
         updatedAt: new Date().toISOString()
       }, { merge: true });
       
+      var cp = getCurrentPlaylist();
+      if (cp && cp.shareId) publishShared(cp).catch(function (e) { console.error(e); });
       if (!silent) toast('☁️ 已儲存至雲端');
     } catch (e) {
       console.error('雲端儲存失敗', e);
@@ -220,11 +223,11 @@
     return (h >>> 0).toString(36);
   }
 
-  function recordHistory(code) {
+  function recordHistory(code, sid) {
     var vids = playlist.songs.map(function (s) { return parseVideoId(s.videoId); }).join(',');
-    var k = hash32((playlist.name || '') + '|' + vids);
+    var k = sid ? 's' + sid : hash32((playlist.name || '') + '|' + vids);
     var item = {
-      k: k, code: code, n: playlist.name || '未命名歌單', c: playlist.songs.length,
+      k: k, code: code, sid: sid || '', n: playlist.name || '未命名歌單', c: playlist.songs.length,
       cv: thumbOf(playlist.songs[0]) || '', at: Date.now()
     };
     playHistory = [item].concat(playHistory.filter(function (h) { return h.k !== k; })).slice(0, 30);
@@ -245,7 +248,7 @@
         '<span class="pc-title">' + esc(h.n) + '</span>' +
         '<span class="pc-meta">' + esc(h.c) + ' 首 · ' + esc(new Date(h.at).toLocaleDateString('zh-TW')) + '</span>' +
         '</span></a><button type="button" class="icon-btn danger" aria-label="移除紀錄">✕</button>';
-      row.querySelector('a').setAttribute('href', '#play/' + h.code);
+      row.querySelector('a').setAttribute('href', /^[a-z0-9]{6,12}$/.test(h.sid || '') ? '#s/' + h.sid : '#play/' + h.code);
       if (/^https?:\/\//i.test(h.cv || '')) {
         row.querySelector('.hist-cover').style.backgroundImage = 'url("' + h.cv.replace(/"/g, '%22') + '")';
       }
@@ -269,6 +272,10 @@
 
     if (hash.indexOf('#play/') === 0) {
       showPlayView(hash.slice(6), false);
+      return;
+    }
+    if (hash.indexOf('#s/') === 0) {
+      loadShared(hash.slice(3));
       return;
     }
     if (hash.indexOf('#preview/') === 0) {
@@ -304,7 +311,7 @@
     document.body.classList.remove('playing');
     if ($('tapPrompt')) $('tapPrompt').hidden = true;
     stopProgress();
-    if ($('fill')) $('fill').style.transform = 'scaleX(0)';
+    setBar(0);
     if ($('cur')) $('cur').textContent = '0:00';
     if ($('dur')) $('dur').textContent = '0:00';
   }
@@ -315,6 +322,10 @@
       if (el) el.hidden = (v !== id);
     });
     window.scrollTo(0, 0);
+    var lock = id === 'viewPlay';
+    document.body.classList.toggle('play-mode', lock);
+    var vp = document.querySelector('meta[name="viewport"]');
+    if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover' + (lock ? ', maximum-scale=1, user-scalable=no' : ''));
   }
 
   /* ============ 首頁視圖 ============ */
@@ -593,7 +604,31 @@
     return unpackPayload(JSON.parse(json));
   }
 
-  function showPlayView(code, isPreview) {
+  function publishShared(pl) {
+    var mini = packPayload(pl);
+    return dbAPI.setDoc(dbAPI.doc(dbAPI.db, 'shared', pl.shareId), {
+      owner: currentUser.uid, n: mini.n, s: mini.s, u: new Date().toISOString()
+    });
+  }
+
+  function removeShared(pl) {
+    if (pl && pl.shareId && currentUser && dbAPI) {
+      dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'shared', pl.shareId)).catch(function (e) { console.error(e); });
+    }
+  }
+
+  function loadShared(id) {
+    if (!/^[a-z0-9]{6,12}$/.test(id)) { showError('無效的分享連結'); return; }
+    if (!dbAPI) return;
+    dbAPI.getDoc(dbAPI.doc(dbAPI.db, 'shared', id)).then(function (snap) {
+      if (location.hash !== '#s/' + id) return;
+      if (!snap.exists()) { showError('找不到這份歌單，連結可能已失效。'); return; }
+      var d = snap.data();
+      showPlayView(encodePlaylist(unpackPayload({ n: d.n, s: d.s })), false, id);
+    }).catch(function (e) { showError('無法讀取歌單：' + (e.code || e.message)); });
+  }
+
+  function showPlayView(code, isPreview, sid) {
     if (!isPreview) previewFromId = null;
     var same = !!player && code === currentPlayCode && !$('viewPlay').hidden;
     try {
@@ -614,7 +649,7 @@
     }
 
     document.title = (playlist.name || 'Anime Vinyl') + ' — Anime Vinyl';
-    if (!isPreview && !same) recordHistory(code);
+    if (!isPreview && !same) recordHistory(code, sid);
     
     if ($('backLink')) {
       $('backLink').hidden = !currentUser;
@@ -745,9 +780,9 @@
       if ($('playBtn')) $('playBtn').textContent = '▶';
       stopProgress();
       if (currentIndex < playlist.songs.length - 1) {
-        setTimeout(function () { goToSong(currentIndex + 1); }, 700);
+        goToSong(currentIndex + 1);
       } else {
-        if ($('fill')) $('fill').style.transform = 'scaleX(1)';
+        setBar(1);
       }
     }
   }
@@ -759,6 +794,9 @@
       100: '影片不存在或已設為私人。', 101: '影片擁有者不允許嵌入播放。', 150: '影片擁有者不允許嵌入播放。'
     };
     toast(msgs[e.data] || '影片載入失敗。');
+    if (playlist && currentIndex < playlist.songs.length - 1) {
+      setTimeout(function () { goToSong(currentIndex + 1); }, 1500);
+    }
   }
 
   function goToSong(i) {
@@ -767,7 +805,7 @@
     var s = playlist.songs[i];
     renderPlayMeta();
     renderDrawer();
-    if ($('fill')) $('fill').style.transform = 'scaleX(0)';
+    setBar(0);
     if ($('cur')) $('cur').textContent = '0:00';
     if ($('dur')) $('dur').textContent = '0:00';
     lastSec = -1;
@@ -784,12 +822,13 @@
     lastSec = -1;
     var fillEl = $('fill'), curEl = $('cur'), durEl = $('dur');
     progressTimer = setInterval(function () {
+      if (seeking) return;
       if (!player || !player.getDuration) return;
       var d = player.getDuration();
       var c = player.getCurrentTime();
       if (!d) return;
       
-      fillEl.style.transform = 'scaleX(' + (c / d) + ')';
+      setBar(c / d);
       
       var sec = Math.floor(c);
       if (sec !== lastSec) {
@@ -915,6 +954,67 @@
     });
   }
 
+  function setBar(r) {
+    r = Math.min(1, Math.max(0, r || 0));
+    var f = $('fill'), t = $('thumb');
+    if (f) f.style.transform = 'scaleX(' + r + ')';
+    if (t) t.style.left = 'calc(' + (r * 100) + '% - 6px)';
+  }
+
+  function bindSeek() {
+    var seek = $('seek');
+    if (!seek) return;
+    var last = 0;
+    function ratio(e) {
+      var r = seek.getBoundingClientRect();
+      return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    }
+    function dur() { return (player && player.getDuration) ? player.getDuration() : 0; }
+    seek.addEventListener('pointerdown', function (e) {
+      if (!dur()) return;
+      seeking = true;
+      seek.setPointerCapture(e.pointerId);
+      seek.classList.add('dragging');
+      last = ratio(e); setBar(last);
+      $('cur').textContent = fmtTime(last * dur());
+    });
+    seek.addEventListener('pointermove', function (e) {
+      if (!seeking) return;
+      last = ratio(e); setBar(last);
+      $('cur').textContent = fmtTime(last * dur());
+    });
+    function end(e) {
+      if (!seeking) return;
+      seeking = false;
+      seek.classList.remove('dragging');
+      if (e.type === 'pointerup') last = ratio(e);
+      if (dur()) player.seekTo(last * dur(), true);
+    }
+    seek.addEventListener('pointerup', end);
+    seek.addEventListener('pointercancel', end);
+  }
+
+  function buildEq() {
+    var eq = $('eq');
+    if (!eq) return;
+    for (var i = 0; i < 28; i++) {
+      var b = document.createElement('i');
+      b.style.setProperty('--d', (0.45 + Math.random() * 0.7).toFixed(2) + 's');
+      b.style.setProperty('--dl', (-Math.random()).toFixed(2) + 's');
+      b.style.setProperty('--h', (0.35 + Math.random() * 0.65).toFixed(2));
+      eq.appendChild(b);
+    }
+  }
+
+  function bindZoomLock() {
+    document.addEventListener('gesturestart', function (e) {
+      if (document.body.classList.contains('play-mode')) e.preventDefault();
+    });
+    document.addEventListener('touchmove', function (e) {
+      if (document.body.classList.contains('play-mode') && e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
+  }
+
   function bindEditorControls() {
     if ($('createPlaylistBtn')) $('createPlaylistBtn').addEventListener('click', function () {
       if (!currentUser) return;
@@ -966,23 +1066,34 @@
       location.hash = 'preview/' + encodePlaylist(pl);
     });
 
-    if ($('shareBtn')) $('shareBtn').addEventListener('click', function () {
+    if ($('shareBtn')) $('shareBtn').addEventListener('click', async function () {
       var pl = getCurrentPlaylist();
       if (!pl) return;
       var valid = pl.songs.filter(function (s) { return parseVideoId(s.videoId); });
       if (!valid.length) { toast('請先新增至少一首有 YouTube 影片 ID 的歌曲'); return; }
-      var code = encodePlaylist(pl);
       var base = location.origin + location.pathname + location.search;
-      var url = base + '#play/' + code;
+      var url, tip;
+      if (currentUser && dbAPI && cloudReady) {
+        try {
+          if (!pl.shareId) {
+            pl.shareId = (Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 8);
+            markDirty();
+          }
+          await publishShared(pl);
+          saveDraftToCloud(true);
+          url = base + '#s/' + pl.shareId;
+          tip = '這是短網址：之後修改並儲存歌單，連結內容會自動更新，NFC 標籤不用重寫。';
+        } catch (e) {
+          toast('短網址建立失敗：' + (e.code || e.message), 5000);
+          return;
+        }
+      } else {
+        url = base + '#play/' + encodePlaylist(pl);
+        tip = '（雲端尚未連線，已產生完整長連結，內容不會隨編輯更新。）';
+      }
       if ($('shareUrl')) $('shareUrl').value = url;
       if ($('shareBox')) $('shareBox').hidden = false;
-
-      var len = url.length;
-      var tip;
-      if (len <= 400) tip = '此連結可直接寫入 NTAG215（504 bytes）標籤。';
-      else if (len <= 800) tip = '建議使用 NTAG216（888 bytes）標籤，或減少歌曲數量。';
-      else tip = '連結較長，建議減少歌曲數量，或改用 NTAG216 標籤。';
-      if ($('shareInfo')) $('shareInfo').textContent = '連結長度：' + len + ' 字元。' + tip;
+      if ($('shareInfo')) $('shareInfo').textContent = '連結長度：' + url.length + ' 字元。' + tip;
       if ($('shareBox')) $('shareBox').scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
@@ -1057,6 +1168,7 @@
         
         var idx = state.playlists.findIndex(p => p.id === targetId);
         if (idx !== -1) {
+          removeShared(state.playlists[idx]);
           state.playlists.splice(idx, 1);
           saveDraft();
           if (currentUser) saveDraftToCloud(true);
@@ -1076,7 +1188,8 @@
     } else {
       var idx = state.playlists.findIndex(p => p.id === targetId);
       if (idx !== -1) {
-        state.playlists.splice(idx, 1);
+        removeShared(state.playlists[idx]);
+          state.playlists.splice(idx, 1);
         saveDraft();
         if (currentUser) saveDraftToCloud(true);
       }
@@ -1182,7 +1295,7 @@
       if (homeUserArea) homeUserArea.hidden = true;
       
       var hash = location.hash || '';
-      if (hash.startsWith('#play/') && $('backLink')) {
+      if ((hash.startsWith('#play/') || hash.startsWith('#s/')) && $('backLink')) {
         $('backLink').hidden = true;
       }
       
@@ -1239,6 +1352,11 @@
         clearTimeout(autoSaveTimer);
         var docRef = dbAPI.doc(dbAPI.db, 'playlists', uid);
         authAPI.reauthenticateWithPopup(currentUser, authAPI.provider)
+          .then(function () {
+            return Promise.all(state.playlists.filter(function (p) { return p.shareId; }).map(function (p) {
+              return dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'shared', p.shareId));
+            }));
+          })
           .then(function () { return dbAPI.deleteDoc(docRef); })
           .then(function () { return authAPI.deleteUser(currentUser); })
           .then(function () {
@@ -1272,6 +1390,9 @@
     bindPlayControls();
     bindAuthControls();
     bindDeleteControls();
+    bindSeek();
+    buildEq();
+    bindZoomLock();
     
     loadDraft();
     
