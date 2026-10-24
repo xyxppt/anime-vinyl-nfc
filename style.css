@@ -352,3 +352,7 @@ button.nav-arrow { transition: color .2s, opacity .2s, transform .15s; }
   .drawer-item:hover { background: rgba(255,255,255,.05); }
   .nav-arrow:hover { color: var(--accent); }
 }
+
+/* ===== 全螢幕 / 加到主畫面 ===== */
+html { background: var(--bg-dark); }
+body { padding-top: calc(16px + env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
