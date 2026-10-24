@@ -49,12 +49,9 @@
 
   /* ============ 資料層 ============ */
   var LS_KEY = 'anime-vinyl:data';
-  // 狀態：包含所有歌單的陣列
   var state = { playlists: [] };
-  // 當前正在編輯的歌單 ID
   var currentPlaylistId = null;
-  // 是否已登入
-  var isDirty = false; // 追蹤是否有未儲存的變更
+  var isDirty = false;
 
   function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
@@ -77,13 +74,11 @@
         if (d && Array.isArray(d.playlists)) {
           state.playlists = d.playlists;
         } else if (d && Array.isArray(d.songs)) {
-          // 相容舊版單一歌單
           var oldPl = createEmptyPlaylist(d.name);
           oldPl.songs = d.songs;
           state.playlists = [oldPl];
         }
       }
-      // 如果完全沒有資料，建立一個預設的
       if (!state.playlists.length) {
         state.playlists = [createEmptyPlaylist('我的第一張黑膠')];
       }
@@ -121,10 +116,9 @@
           state.playlists = data.playlists;
         }
       } else {
-        // 雲端沒資料，把本機推上去
         await saveDraftToCloud(true);
       }
-      saveDraft(); // 同步存回本機
+      saveDraft();
       renderPlaylistGrid();
     } catch (e) {
       console.error('雲端載入失敗', e);
@@ -133,7 +127,7 @@
     }
   }
 
-  /* ============ 路由 ============ */
+  /* ============ 路由與權限控制 ============ */
   function route() {
     var hash = location.hash || '';
 
@@ -142,9 +136,20 @@
       return;
     }
     if (hash.indexOf('#preview/') === 0) {
+      // 允許訪客透過預覽連結看自己的歌單，但正常來說預覽是給有登入的人用的
       showPlayView(hash.slice(9), true);
       return;
     }
+    
+    // 權限攔截：未登入且不是播放頁面
+    if (!currentUser && !hash.startsWith('#play/')) {
+      if (hash.startsWith('#edit/')) {
+        toast('請先登入才能編輯歌單');
+      }
+      location.replace(location.pathname + location.search + '#list');
+      return;
+    }
+
     if (hash.indexOf('#edit/') === 0) {
       showEditView(hash.slice(6));
       return;
@@ -172,20 +177,25 @@
   }
 
   function show(id) {
-    ['viewEdit', 'viewPlay', 'viewError', 'viewList'].forEach(function (v) {
+    ['viewEdit', 'viewPlay', 'viewError', 'viewHome'].forEach(function (v) {
       var el = $(v);
       if (el) el.hidden = (v !== id);
     });
     window.scrollTo(0, 0);
   }
 
-  /* ============ 總覽視圖 ============ */
+  /* ============ 首頁視圖 ============ */
   function showListView() {
-    if (!isDirty) {
-      if (!currentUser) loadDraft();
+    if (currentUser) {
+      if (!isDirty) loadDraft(); // 如果沒有未儲存的變更，從本機拉資料
+      renderPlaylistGrid();
+      if ($('memberArea')) $('memberArea').hidden = false;
+      if ($('guestArea')) $('guestArea').hidden = true;
+    } else {
+      if ($('memberArea')) $('memberArea').hidden = true;
+      if ($('guestArea')) $('guestArea').hidden = false;
     }
-    renderPlaylistGrid();
-    show('viewList');
+    show('viewHome');
   }
 
   function renderPlaylistGrid() {
@@ -198,7 +208,6 @@
       return;
     }
 
-    // 依最後修改時間排序
     var sorted = [...state.playlists].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
     sorted.forEach(function(pl) {
@@ -220,6 +229,10 @@
 
   /* ============ 編輯視圖 ============ */
   function showEditView(id) {
+    if (!currentUser) {
+      location.hash = '#list';
+      return;
+    }
     var pl = state.playlists.find(p => p.id === id);
     if (!pl) {
       showError('找不到該歌單');
@@ -251,7 +264,6 @@
   function markDirty() {
     isDirty = true;
     if ($('saveStatus')) $('saveStatus').textContent = '未儲存';
-    // 每次修改也存進本機，避免重整消失
     var pl = state.playlists.find(p => p.id === currentPlaylistId);
     if (pl) pl.updatedAt = new Date().toISOString();
     saveDraft();
@@ -452,7 +464,11 @@
     }
 
     document.title = (playlist.name || 'Anime Vinyl') + ' — Anime Vinyl';
-    if ($('backLink')) $('backLink').hidden = !isPreview;
+    
+    // 只有登入的人才能看到「返回首頁」按鈕
+    if ($('backLink')) {
+      $('backLink').hidden = !currentUser;
+    }
 
     currentIndex = 0;
     show('viewPlay');
@@ -720,16 +736,15 @@
   }
 
   function bindEditorControls() {
-    // 建立新歌單
     if ($('createPlaylistBtn')) $('createPlaylistBtn').addEventListener('click', function () {
+      if (!currentUser) return;
       var newPl = createEmptyPlaylist('新歌單 ' + (state.playlists.length + 1));
       state.playlists.push(newPl);
       saveDraft();
-      if (currentUser) saveDraftToCloud(true);
+      saveDraftToCloud(true);
       location.hash = '#edit/' + newPl.id;
     });
 
-    // 編輯歌單名稱
     if ($('playlistName')) $('playlistName').addEventListener('input', function (e) {
       var pl = state.playlists.find(p => p.id === currentPlaylistId);
       if (pl) {
@@ -738,12 +753,9 @@
       }
     });
 
-    // 手動儲存按鈕
     if ($('saveBtn')) $('saveBtn').addEventListener('click', function () {
       if (!currentUser) {
         toast('請先登入才能儲存至雲端');
-        saveDraft(); // 還是存本機
-        if ($('saveStatus')) $('saveStatus').textContent = '已存本機';
         return;
       }
       var pl = state.playlists.find(p => p.id === currentPlaylistId);
@@ -811,84 +823,112 @@
   }
 
   /* ============ 登入與 UI 切換 ============ */
+  function triggerLogin() {
+    if (!window.firebaseAuth) {
+      toast('登入模組載入中，請稍候再試...');
+      return;
+    }
+    var ua = navigator.userAgent || navigator.vendor || window.opera;
+    if (ua.indexOf("FBAN") > -1 || ua.indexOf("FBAV") > -1 || ua.indexOf("Line") > -1 || ua.indexOf("Instagram") > -1) {
+      toast('請點擊右上角選單，選擇「使用外部瀏覽器」開啟本頁面進行登入。', 5000);
+      return;
+    }
+    var authAPI = window.firebaseAuth;
+    authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(function(error) {
+      if (error.code === 'auth/popup-blocked') {
+        toast('彈出視窗被阻擋，請允許本站顯示彈出視窗後重試。');
+      } else if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+        toast('登入失敗：' + error.message);
+      }
+    });
+  }
+
+  function triggerLogout() {
+    if (!window.firebaseAuth) return;
+    window.firebaseAuth.signOut(window.firebaseAuth.auth);
+    toast('已登出');
+  }
+
   function updateAuthUI(user) {
     currentUser = user;
-    var loginBtn = $('loginBtn');
-    var userProfile = $('userProfile');
-    var userAvatar = $('userAvatar');
-    var userName = $('userName');
-    var userEmail = $('userEmail');
-    var userDropdown = $('userDropdown');
+    
+    var loginBtns = [$('loginBtn'), $('loginBtnPlay'), $('guestLoginBtn')];
+    var profiles = [$('userProfile'), $('userProfilePlay')];
+    var dropdowns = [$('userDropdown'), $('userDropdownPlay')];
     
     if (user) {
-      if (loginBtn) loginBtn.hidden = true;
-      if (userProfile) userProfile.hidden = false;
+      loginBtns.forEach(btn => { if (btn) btn.hidden = true; });
+      profiles.forEach(prof => { if (prof) prof.hidden = false; });
       
-      if (userAvatar) userAvatar.src = user.photoURL || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
-      if (userName) userName.textContent = user.displayName || '使用者';
-      if (userEmail) userEmail.textContent = user.email || '';
+      var avatarUrl = user.photoURL || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
+      var nameStr = user.displayName || '使用者';
       
-      // 登入後從雲端拉取最新資料
+      if ($('userAvatar')) $('userAvatar').src = avatarUrl;
+      if ($('userAvatarPlay')) $('userAvatarPlay').src = avatarUrl;
+      
+      if ($('userName')) $('userName').textContent = nameStr;
+      if ($('userEmail')) $('userEmail').textContent = user.email || '';
+      if ($('userNamePlay')) $('userNamePlay').textContent = nameStr;
+      
+      if ($('backLink')) $('backLink').hidden = false; // 登入後顯示返回按鈕
+      
       loadDraftFromCloud();
     } else {
-      if (loginBtn) loginBtn.hidden = false;
-      if (userProfile) userProfile.hidden = true;
-      if (userDropdown) userDropdown.hidden = true;
+      loginBtns.forEach(btn => { if (btn) btn.hidden = false; });
+      profiles.forEach(prof => { if (prof) prof.hidden = true; });
+      dropdowns.forEach(dd => { if (dd) dd.hidden = true; });
       
-      // 未登入時載入本機資料
-      loadDraft();
-      renderPlaylistGrid();
+      // 訪客狀態：如果他在播放頁，隱藏返回按鈕
+      var hash = location.hash || '';
+      if (hash.startsWith('#play/') && $('backLink')) {
+        $('backLink').hidden = true;
+      }
+      
+      // 重新整理首頁狀態
+      if (!hash.startsWith('#play/')) {
+        showListView();
+      }
     }
   }
 
   function bindAuthControls() {
-    if ($('loginBtn')) $('loginBtn').addEventListener('click', function() {
-      if (!window.firebaseAuth) {
-        toast('登入模組載入中，請稍候再試...');
-        return;
-      }
-      var ua = navigator.userAgent || navigator.vendor || window.opera;
-      if (ua.indexOf("FBAN") > -1 || ua.indexOf("FBAV") > -1 || ua.indexOf("Line") > -1 || ua.indexOf("Instagram") > -1) {
-        toast('請點擊右上角選單，選擇「使用外部瀏覽器」開啟本頁面進行登入。', 5000);
-        return;
-      }
-      var authAPI = window.firebaseAuth;
-      authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(function(error) {
-        if (error.code === 'auth/popup-blocked') {
-          toast('彈出視窗被阻擋，請允許本站顯示彈出視窗後重試。');
-        } else if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
-          toast('登入失敗：' + error.message);
-        }
-      });
-    });
+    // 綁定所有登入按鈕
+    if ($('loginBtn')) $('loginBtn').addEventListener('click', triggerLogin);
+    if ($('loginBtnPlay')) $('loginBtnPlay').addEventListener('click', triggerLogin);
+    if ($('guestLoginBtn')) $('guestLoginBtn').addEventListener('click', triggerLogin);
 
-    if ($('userProfile')) $('userProfile').addEventListener('click', function(e) {
-      e.stopPropagation();
-      var dropdown = $('userDropdown');
-      if (dropdown) dropdown.hidden = !dropdown.hidden;
+    // 綁定頭像下拉選單
+    var profiles = [$('userProfile'), $('userProfilePlay')];
+    profiles.forEach(prof => {
+      if (prof) {
+        prof.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var dd = prof.querySelector('.user-dropdown');
+          if (dd) dd.hidden = !dd.hidden;
+        });
+      }
     });
 
     document.addEventListener('click', function() {
-      if ($('userDropdown')) $('userDropdown').hidden = true;
+      document.querySelectorAll('.user-dropdown').forEach(dd => dd.hidden = true);
     });
 
     if ($('switchAccountBtn')) $('switchAccountBtn').addEventListener('click', function(e) {
       e.stopPropagation();
-      if ($('userDropdown')) $('userDropdown').hidden = true;
       if (!window.firebaseAuth) return;
       var authAPI = window.firebaseAuth;
       authAPI.signOut(authAPI.auth).then(function() {
         authAPI.provider.setCustomParameters({ prompt: 'select_account' });
-        authAPI.signInWithPopup(authAPI.auth, authAPI.provider).catch(console.error);
+        triggerLogin();
       });
     });
 
-    if ($('logoutBtn')) $('logoutBtn').addEventListener('click', function(e) {
-      e.stopPropagation();
-      if ($('userDropdown')) $('userDropdown').hidden = true;
-      if (!window.firebaseAuth) return;
-      window.firebaseAuth.signOut(window.firebaseAuth.auth);
-      toast('已登出');
+    var logoutBtns = [$('logoutBtn'), ...document.querySelectorAll('.play-logout-btn')];
+    logoutBtns.forEach(btn => {
+      if (btn) btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        triggerLogout();
+      });
     });
 
     if ($('deleteAccountBtn')) $('deleteAccountBtn').addEventListener('click', function(e) {
@@ -910,8 +950,8 @@
           localStorage.removeItem(LS_KEY);
           state = { playlists: [] };
           loadDraft();
-          renderPlaylistGrid();
           location.hash = '#list';
+          updateAuthUI(null);
         }).catch(function(error) {
           if (error.code === 'auth/requires-recent-login') {
             toast('安全性考量，請先登出再重新登入，然後再執行刪除。', 5000);
@@ -929,6 +969,8 @@
     var authAPI = window.firebaseAuth;
     authAPI.onAuthStateChanged(authAPI.auth, function(user) {
       updateAuthUI(user);
+      // 登入狀態改變時，重新執行路由以確保畫面正確
+      route();
     });
   }
 
@@ -938,8 +980,7 @@
     bindPlayControls();
     bindAuthControls();
     
-    // 初始載入本機資料
-    loadDraft();
+    loadDraft(); // 先載入本機資料，避免畫面空白
     
     route();
     window.addEventListener('hashchange', route);
