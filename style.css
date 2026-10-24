@@ -73,7 +73,7 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .btn:disabled { opacity: .3; }
 .btn.primary { width: 72px; height: 72px; font-size: 24px; color: var(--bg-dark); border-color: var(--accent); background: var(--accent); box-shadow: 0 0 20px var(--accent-dim), inset 0 1px 2px rgba(255,255,255,.5); }
 
-.tap-prompt { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer; background: rgba(5,5,8,.8); backdrop-filter: blur(4px); }
+.tap-prompt { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer; background: rgba(5,5,8,.9); }
 .tap-prompt span { padding: 16px 32px; border-radius: 999px; font-size: 16px; letter-spacing: .1em; color: var(--bg-dark); background: var(--accent); box-shadow: 0 0 30px var(--accent-dim); animation: breathe 2s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.05); opacity: 1; } }
 
@@ -276,4 +276,12 @@ body.playing .tonearm { transform: rotate(-31deg); }
   transform: scale(0.1) translateY(-100px) rotate(20deg) !important;
   opacity: 0;
   transition: all 0.6s cubic-bezier(0.5, 0, 0.5, 1) !important;
+}
+
+/* ===== 修正與無障礙 ===== */
+.vinyl-swing { position: absolute; inset: 0; will-change: transform; }
+button.nav-arrow { background: none; border: none; font-family: inherit; line-height: 1; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
