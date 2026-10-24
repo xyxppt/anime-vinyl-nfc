@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#1b1210">
+<meta name="theme-color" content="#050508">
 <title>Anime Vinyl</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -17,17 +17,22 @@
       <button class="drawer-toggle" id="listToggle" type="button">☰ 歌單</button>
     </div>
 
-    <div class="plinth">
-      <div class="vinyl">
-        <div class="label" id="label"></div>
-        <div class="spindle"></div>
+    <!-- 唱盤區塊 -->
+    <div class="plinth-wrapper">
+      <div class="nav-arrow left" id="prevArrow">❮</div>
+      <div class="plinth" id="vinylPlinth">
+        <div class="vinyl">
+          <div class="label" id="label"></div>
+          <div class="spindle"></div>
+        </div>
+        <div class="sheen"></div>
+        <div class="tonearm" id="tonearm">
+          <div class="arm-base"></div>
+          <div class="arm-rod"></div>
+          <div class="arm-head"></div>
+        </div>
       </div>
-      <div class="sheen"></div>
-      <div class="tonearm" id="tonearm">
-        <div class="arm-base"></div>
-        <div class="arm-rod"></div>
-        <div class="arm-head"></div>
-      </div>
+      <div class="nav-arrow right" id="nextArrow">❯</div>
     </div>
 
     <div class="meta">
@@ -36,11 +41,18 @@
       <p class="artist" id="artist"></p>
     </div>
 
-    <div class="progress">
-      <div class="bar"><div class="fill" id="fill"></div></div>
-      <div class="times">
-        <span id="cur">0:00</span>
-        <span id="dur">0:00</span>
+    <!-- 波浪進度條區塊 -->
+    <div class="progress-area">
+      <div class="wave-container" id="waveContainer">
+        <div class="wave wave1"></div>
+        <div class="wave wave2"></div>
+      </div>
+      <div class="progress">
+        <div class="bar"><div class="fill" id="fill"></div></div>
+        <div class="times">
+          <span id="cur">0:00</span>
+          <span id="dur">0:00</span>
+        </div>
       </div>
     </div>
 
@@ -49,6 +61,9 @@
       <button class="btn primary" id="playBtn" type="button" aria-label="播放／暫停">▶</button>
       <button class="btn" id="nextBtn" type="button" aria-label="下一首">⏭</button>
     </div>
+    
+    <!-- 下滑提示線 -->
+    <div class="pull-indicator" id="pullIndicator"></div>
   </div>
 
   <!-- 歌單抽屜 -->
@@ -59,6 +74,22 @@
         <button class="drawer-close" id="drawerClose" type="button">✕</button>
       </div>
       <div class="drawer-list" id="drawerList"></div>
+    </div>
+  </div>
+
+  <!-- 下滑開啟的原音樂網頁視窗 -->
+  <div class="yt-sheet-overlay" id="ytSheetOverlay" hidden>
+    <div class="yt-sheet" id="ytSheet">
+      <div class="yt-sheet-drag-handle"></div>
+      <h2>前往原音樂網站</h2>
+      <a class="yt-link-card" id="ytLink" href="#" target="_blank" rel="noopener">
+        <div class="yt-img-wrapper">
+          <!-- 這裡會由 JS 動態插入你的圖片 -->
+          <img id="sheetImage" src="" alt="歌曲封面">
+        </div>
+        <div class="yt-btn-text">點我前往原音樂網站</div>
+      </a>
+      <button class="yt-close-btn" id="ytCloseBtn">關閉</button>
     </div>
   </div>
 </main>
