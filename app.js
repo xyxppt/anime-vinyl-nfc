@@ -3,6 +3,12 @@
 
   var $ = function (id) { return document.getElementById(id); };
 
+  // ==========================================
+  // ★ 請在這裡替換成你上傳到 GitHub 的圖片網址 ★
+  // 如果保持為空字串 ''，程式會自動使用 YouTube 的縮圖
+  const customImageUrl = ''; 
+  // ==========================================
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -164,9 +170,7 @@
 
   function stopPlayback() {
     if (player && player.stopVideo) {
-      try {
-        player.stopVideo();
-      } catch (e) {}
+      try { player.stopVideo(); } catch (e) {}
     }
     document.body.classList.remove('playing');
     $('tapPrompt').hidden = true;
@@ -326,7 +330,8 @@
     renderPlayMeta();
     renderDrawer();
     initYTPlayer();
-    bindSwipeGestures(); // 綁定滑動手勢
+    bindSwipeGestures();
+    bindYtSheetGestures();
   }
 
   function renderPlayMeta() {
@@ -336,8 +341,17 @@
     $('artist').textContent = s.artist || '';
     var url = thumbOf(s);
     $('label').style.backgroundImage = url ? 'url("' + url + '")' : '';
+    
+    // 更新箭頭狀態
+    $('prevArrow').classList.toggle('disabled', currentIndex === 0);
+    $('nextArrow').classList.toggle('disabled', currentIndex >= playlist.songs.length - 1);
     $('prevBtn').disabled = currentIndex === 0;
     $('nextBtn').disabled = currentIndex >= playlist.songs.length - 1;
+
+    // 更新下滑視窗的資訊
+    var vid = parseVideoId(s.videoId);
+    $('ytLink').href = 'https://www.youtube.com/watch?v=' + vid;
+    $('sheetImage').src = customImageUrl ? customImageUrl : url;
   }
 
   function initYTPlayer() {
@@ -499,65 +513,120 @@
     show('viewError');
   }
 
-  /* ============ 滑動手勢切歌 ============ */
+  /* ============ 手勢與事件綁定 ============ */
+  
+  // 黑膠左右滑動與箭頭點擊
   function bindSwipeGestures() {
-    var plinth = document.querySelector('.plinth');
+    var vinylPlinth = $('vinylPlinth');
     var vinyl = document.querySelector('.vinyl');
-    if (!plinth || !vinyl) return;
+    if (!vinylPlinth || !vinyl) return;
 
-    var startX = 0;
-    var startY = 0;
-    var isSwiping = false;
+    $('prevArrow').addEventListener('click', function() { goToSong(currentIndex - 1); });
+    $('nextArrow').addEventListener('click', function() { goToSong(currentIndex + 1); });
 
-    // 移除舊的監聽，避免重複綁定
-    plinth.replaceWith(plinth.cloneNode(true));
-    plinth = document.querySelector('.plinth');
-    vinyl = document.querySelector('.vinyl');
+    var startX = 0, startY = 0, isSwiping = false;
 
-    plinth.addEventListener('touchstart', function (e) {
+    // 複製節點來清除舊的監聽器
+    var newPlinth = vinylPlinth.cloneNode(true);
+    vinylPlinth.parentNode.replaceChild(newPlinth, vinylPlinth);
+    vinylPlinth = newPlinth;
+    vinyl = vinylPlinth.querySelector('.vinyl');
+
+    vinylPlinth.addEventListener('touchstart', function (e) {
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       isSwiping = false;
-      vinyl.style.transition = 'none'; // 拖曳時取消過渡
+      vinyl.style.transition = 'none';
     }, { passive: true });
 
-    plinth.addEventListener('touchmove', function (e) {
+    vinylPlinth.addEventListener('touchmove', function (e) {
       if (!startX || !startY) return;
       var diffX = e.touches[0].clientX - startX;
       var diffY = e.touches[0].clientY - startY;
 
-      // 判斷是橫向滑動
       if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 20) {
         isSwiping = true;
-        // 視覺回饋：稍微位移
         var move = diffX > 0 ? Math.min(diffX * 0.4, 30) : Math.max(diffX * 0.4, -30);
         vinyl.style.transform = 'translateX(' + move + 'px) rotate(' + (move * 0.5) + 'deg) translateZ(0)';
       }
     }, { passive: true });
 
-    plinth.addEventListener('touchend', function (e) {
+    vinylPlinth.addEventListener('touchend', function (e) {
       if (!startX || !startY) return;
       var diffX = e.changedTouches[0].clientX - startX;
       var diffY = e.changedTouches[0].clientY - startY;
 
       vinyl.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
-      
-      // 恢復原位
       vinyl.style.transform = 'translateX(0) rotate(0) translateZ(0)';
 
       if (isSwiping && Math.abs(diffX) > 50 && Math.abs(diffY) < 80) {
         if (diffX > 0 && currentIndex > 0) {
-          // 往右滑 -> 上一首
           goToSong(currentIndex - 1);
         } else if (diffX < 0 && currentIndex < playlist.songs.length - 1) {
-          // 往左滑 -> 下一首
           goToSong(currentIndex + 1);
         }
       }
+      startX = 0; startY = 0; isSwiping = false;
+    }, { passive: true });
+  }
 
-      startX = 0;
+  // 下滑開啟 YT 視窗
+  function bindYtSheetGestures() {
+    var overlay = $('ytSheetOverlay');
+    var sheet = $('ytSheet');
+    var startY = 0;
+    var currentY = 0;
+    var isDragging = false;
+
+    // 點擊背景或關閉按鈕關閉
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay || e.target.id === 'ytCloseBtn') {
+        closeSheet();
+      }
+    });
+
+    // 阻止視窗內部點擊事件冒泡
+    sheet.addEventListener('click', function(e) {
+      e.stopPropagation();
+    });
+
+    function closeSheet() {
+      overlay.classList.remove('show');
+      setTimeout(() => { overlay.hidden = true; }, 300);
+    }
+
+    // 監聽下滑手勢 (綁定在整個播放頁面)
+    var playWrap = document.querySelector('.play-wrap');
+    playWrap.addEventListener('touchstart', function(e) {
+      startY = e.touches[0].clientY;
+      currentY = startY;
+      isDragging = false;
+    }, { passive: true });
+
+    playWrap.addEventListener('touchmove', function(e) {
+      if (!startY) return;
+      currentY = e.touches[0].clientY;
+      var diffY = currentY - startY;
+
+      // 只有往下滑超過 30px 才判定為下滑操作
+      if (diffY > 30) {
+        isDragging = true;
+      }
+    }, { passive: true });
+
+    playWrap.addEventListener('touchend', function(e) {
+      if (!startY) return;
+      var diffY = currentY - startY;
+      // 下滑超過 80px 觸發
+      if (isDragging && diffY > 80) {
+        overlay.hidden = false;
+        // 觸發 transition
+        requestAnimationFrame(() => {
+          overlay.classList.add('show');
+        });
+      }
       startY = 0;
-      isSwiping = false;
+      isDragging = false;
     }, { passive: true });
   }
 
