@@ -118,7 +118,7 @@
     try {
       var cp0 = getCurrentPlaylist();
       if (cp0 && cp0.isPublic) {
-        if (!cp0.shareId) cp0.shareId = newShareId();
+        if (!cp0.shareId) { cp0.shareId = newShareId(); cp0.linked = false; }
         cp0.explored = true;
         saveDraft();
       }
@@ -130,12 +130,13 @@
       
       var cp = getCurrentPlaylist();
       if (cp) {
-        if (cp.shareId && (cp.isPublic || cp.explored)) publishShared(cp).catch(function (e) { console.error(e); });
+        if (cp.shareId && (cp.isPublic || cp.linked !== false)) publishShared(cp).catch(function (e) { console.error(e); });
         if (cp.isPublic) {
           publishExplorePlaylist(cp).catch(function (e) { console.error(e); toast('⚠️ 廣場更新失敗：' + (e.code || e.message), 5000); });
         } else if (cp.explored && cp.shareId) {
           dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'explore_playlists', cp.shareId))
             .then(function () {
+              if (cp.linked === false) dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'shared', cp.shareId)).catch(function () {});
               cp.explored = false;
               saveDraft();
               saveDraftToCloud(true);
@@ -313,6 +314,19 @@
     saveHistoryToCloud();
   }
 
+  var statusCache = {};
+  function checkHistoryStatus() {
+    if (!dbAPI) return;
+    playHistory.forEach(function (h) {
+      if (!/^[a-z0-9]{6,12}$/.test(h.sid || '') || statusCache[h.sid] !== undefined) return;
+      statusCache[h.sid] = null;
+      dbAPI.getDoc(dbAPI.doc(dbAPI.db, 'shared', h.sid)).then(function (snap) {
+        statusCache[h.sid] = snap.exists();
+        if (!snap.exists() && (location.hash === '' || location.hash === '#home')) renderHistory();
+      }).catch(function () { delete statusCache[h.sid]; });
+    });
+  }
+
   function renderHistory() {
     var sec = $('historySection'), list = $('historyList');
     if (!sec || !list) return;
@@ -326,7 +340,14 @@
         '<span class="pc-title">' + esc(h.n) + '</span>' +
         '<span class="pc-meta">' + esc(h.c) + ' 首 · ' + esc(new Date(h.at).toLocaleDateString('zh-TW')) + '</span>' +
         '</span></a><button type="button" class="icon-btn danger" aria-label="移除紀錄">✕</button>';
-      row.querySelector('a').setAttribute('href', /^[a-z0-9]{6,12}$/.test(h.sid || '') ? '#s/' + h.sid : '#play/' + h.code);
+      var link = row.querySelector('a');
+      if (h.sid && statusCache[h.sid] === false) {
+        link.style.opacity = '.5';
+        row.querySelector('.pc-meta').textContent = '⚠️ 此歌單已被下架或刪除';
+        link.addEventListener('click', function () { toast('此歌單已被下架或刪除'); });
+      } else {
+        link.setAttribute('href', /^[a-z0-9]{6,12}$/.test(h.sid || '') ? '#s/' + h.sid : '#play/' + h.code);
+      }
       if (/^https?:\/\//i.test(h.cv || '')) {
         row.querySelector('.hist-cover').style.backgroundImage = 'url("' + h.cv.replace(/"/g, '%22') + '")';
       }
@@ -428,7 +449,9 @@
       if ($('memberHome')) $('memberHome').hidden = true;
       if ($('guestHome')) $('guestHome').hidden = false;
     }
+    statusCache = {};
     renderHistory();
+    checkHistoryStatus();
     renderTemplates();
     show('viewHome');
   }
@@ -526,7 +549,7 @@
 
   function unpublishExplore(item, row) {
     if (!confirm('要把「' + (item.name || '這份歌單') + '」從探索廣場下架嗎？\n（你自己的歌單不會被刪除）')) return;
-    var inUse = state.playlists.some(function (p) { return p.shareId === item._id; });
+    var inUse = state.playlists.some(function (p) { return p.shareId === item._id && p.linked !== false; });
     var jobs = [dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'explore_playlists', item._id))];
     if (!inUse) jobs.push(dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'shared', item._id)).catch(function () {}));
     Promise.all(jobs).then(function () {
@@ -634,7 +657,8 @@
     if (!currentUser || !dbAPI || !cloudReady) { toast('請先登入並等待雲端連線，才能寫入短網址'); return; }
     if (!pl.songs.some(function (x) { return parseVideoId(x.videoId); })) { toast('這份歌單還沒有有效的歌曲'); return; }
     try {
-      if (!pl.shareId) { pl.shareId = newShareId(); pl.updatedAt = new Date().toISOString(); saveDraft(); }
+      if (!pl.shareId) pl.shareId = newShareId();
+      if (pl.linked !== true) { pl.linked = true; pl.updatedAt = new Date().toISOString(); saveDraft(); }
       await publishShared(pl);
       saveDraftToCloud(true);
     } catch (e) {
@@ -971,7 +995,7 @@
     if (!dbAPI) return;
     dbAPI.getDoc(dbAPI.doc(dbAPI.db, 'shared', id)).then(function (snap) {
       if (location.hash !== '#s/' + id) return;
-      if (!snap.exists()) { showError('找不到這份歌單，連結可能已失效。'); return; }
+      if (!snap.exists()) { showError('此歌單已被下架或刪除。'); return; }
       var d = snap.data();
       showPlayView(encodePlaylist(unpackPayload({ n: d.n, s: d.s })), false, id);
     }).catch(function (e) { showError('無法讀取歌單：' + (e.code || e.message)); });
@@ -1725,10 +1749,8 @@
       var url, tip;
       if (currentUser && dbAPI && cloudReady) {
         try {
-          if (!pl.shareId) {
-            pl.shareId = (Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 8);
-            markDirty();
-          }
+          if (!pl.shareId) pl.shareId = newShareId();
+          if (pl.linked !== true) { pl.linked = true; markDirty(); }
           await publishShared(pl);
           saveDraftToCloud(true);
           url = base + '#s/' + pl.shareId;
