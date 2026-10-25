@@ -244,6 +244,13 @@
       <input type="checkbox" id="playlistIsPublic" style="width: 18px; height: 18px; accent-color: var(--accent);">
       <span style="font-size: 14px; color: var(--text-main);">🌐 公開發布至探索廣場</span>
     </label>
+    <div id="publicNickWrap" hidden>
+      <label class="field">
+        <span>公開暱稱（所有人都看得到，留空則顯示「匿名動漫迷」）</span>
+        <input id="playlistNick" type="text" maxlength="20" placeholder="匿名動漫迷">
+      </label>
+      <p class="share-info" style="margin-top:6px;">公開後，歌單名稱、歌曲與暱稱會出現在探索廣場，取消勾選即可下架。請勿發布侵權或不當內容，任何人都可以檢舉。</p>
+    </div>
 
     <div id="songEditorList" class="song-list"></div>
 
@@ -323,7 +330,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, deleteUser, signInWithRedirect, reauthenticateWithPopup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { initializeFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { initializeFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, limit, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyB1r6uz7hRPjZz3Ha5YJVRG28vt0B31MVo",
@@ -342,7 +349,7 @@
     const provider = new GoogleAuthProvider();
 
     window.firebaseAuth = { auth, provider, signInWithPopup, signOut, onAuthStateChanged, deleteUser, signInWithRedirect, reauthenticateWithPopup };
-    window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, limit };
+    window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, limit, orderBy };
     
     window.dispatchEvent(new Event('firebaseReady'));
   } catch (e) {
