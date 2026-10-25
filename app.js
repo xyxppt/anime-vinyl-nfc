@@ -413,7 +413,13 @@
     showHomeView();
   }
 
+  function isPlayHidden() {
+    var v = $('viewPlay');
+    return !v || v.hidden;
+  }
+
   function stopPlayback() {
+    clearTimeout(tapTimer);
     if (player && player.stopVideo) {
       try { player.stopVideo(); } catch (e) {}
     }
@@ -1105,6 +1111,7 @@
       window.onYouTubeIframeAPIReady = function () {
         window._ytLoading = false;
         ytApiReady = true;
+        if (isPlayHidden()) return;
         createYTPlayer(parseVideoId(playlist.songs[currentIndex].videoId));
       };
       return;
@@ -1147,12 +1154,13 @@
   }
 
   function onYTReady() {
+    if (isPlayHidden()) { try { player.stopVideo(); } catch (e) {} return; }
     if ($('dur')) $('dur').textContent = fmtTime(player.getDuration());
     try { player.playVideo(); } catch (e) {}
 
     clearTimeout(tapTimer);
     tapTimer = setTimeout(function () {
-      if (!player || !player.getPlayerState) return;
+      if (!player || !player.getPlayerState || isPlayHidden()) return;
       if (player.getPlayerState() !== 1) {
         if ($('tapPrompt')) $('tapPrompt').hidden = false;
       }
@@ -1161,6 +1169,7 @@
 
   function onYTStateChange(e) {
     var st = e.data;
+    if (isPlayHidden()) { if (st === 1) { try { player.stopVideo(); } catch (x) {} } return; }
     if (st === 1) {
       document.body.classList.add('playing');
       if ($('playBtn')) $('playBtn').textContent = '❚❚';
@@ -1192,7 +1201,7 @@
   }
 
   function goToSong(i) {
-    if (i < 0 || i >= playlist.songs.length) return;
+    if (isPlayHidden() || i < 0 || i >= playlist.songs.length) return;
     currentIndex = i;
     var s = playlist.songs[i];
     renderPlayMeta();
@@ -1338,6 +1347,7 @@
 
     if ($('tapPrompt')) $('tapPrompt').addEventListener('click', function () {
       $('tapPrompt').hidden = true;
+      if (isPlayHidden()) return;
       if (player && player.playVideo) player.playVideo();
     });
 
