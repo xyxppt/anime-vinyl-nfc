@@ -45,8 +45,8 @@
   }
 
   function thumbOf(song) {
-    if (song.cover && /^https?:\/\//i.test(song.cover)) return song.cover;
-    var vid = parseVideoId(song.videoId);
+    if (song && song.cover && /^https?:\/\//i.test(song.cover)) return song.cover;
+    var vid = parseVideoId(song ? song.videoId : '');
     if (vid) return 'https://i.ytimg.com/vi/' + vid + '/mqdefault.jpg';
     return '';
   }
@@ -85,6 +85,13 @@
       name: name || '新歌單',
       isPublic: false,
       songs: [{ anime: '', title: '', artist: '', videoId: '', cover: '' }],
+      customStyle: {
+        vinylColor: '#16161a',
+        centerColor: '',
+        bgType: 'color',
+        bgColor: '#0a0a0c',
+        bgImage: ''
+      },
       updatedAt: new Date().toISOString()
     };
   }
@@ -173,6 +180,7 @@
       songsCount: validSongs.length,
       coverUrl: thumbOf(validSongs[0]),
       songs: validSongs,
+      customStyle: pl.customStyle || {},
       updatedAt: new Date().toISOString(),
       views: currentViews
     }, { merge: true });
@@ -439,7 +447,7 @@
     window.scrollTo(0, 0);
     var lock = id === 'viewPlay';
     document.body.classList.toggle('play-mode', lock);
-    if (!lock) { stopPlayback(); setSleep(0); }
+    if (!lock) { stopPlayback(); setSleep(0); resetVinylCustomStyle(); }
     var vp = document.querySelector('meta[name="viewport"]');
     if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover' + (lock ? ', maximum-scale=1, user-scalable=no' : ''));
   }
@@ -491,7 +499,7 @@
     });
   }
 
-  /* ============ 探索廣場視圖邏輯 (確保顯示純數字觀看次數) ============ */
+  /* ============ 探索廣場視圖邏輯 ============ */
   async function showExploreView() {
     show('viewExplore');
     var grid = $('exploreGrid');
@@ -535,7 +543,6 @@
         row.querySelector('a').setAttribute('href', '#s/' + item._id);
         row.querySelector('.pc-title').textContent = item.name || '未命名歌單';
         
-        // 防呆處理：若 views 屬性為 undefined/null，預設顯示 0
         var viewsNum = (item.views !== undefined && item.views !== null) ? item.views : 0;
         row.querySelector('.pc-meta').textContent = '由 ' + (item.ownerName || '匿名動漫迷') + ' 分享 · ' + (item.songsCount || 0) + ' 首 · ' + viewsNum + '次瀏覽';
         
@@ -641,6 +648,7 @@
         cover: x.cover || ''
       };
     });
+    newPl.customStyle = item.customStyle || {};
     state.playlists.push(newPl);
     saveDraft();
     saveDraftToCloud(true);
@@ -954,6 +962,7 @@
   function packPayload(pl) {
     var mini = {
       n: pl.name || '',
+      cs: pl.customStyle || {},
       s: (pl.songs || []).map(function (s) {
         var o = {};
         if (s.anime)  o.a = s.anime;
@@ -969,7 +978,11 @@
   }
 
   function unpackPayload(mini) {
-    var out = { name: mini.n || '未命名歌單', songs: [] };
+    var out = { 
+      name: mini.n || '未命名歌單', 
+      customStyle: mini.cs || {},
+      songs: [] 
+    };
     (mini.s || []).forEach(function (o) {
       out.songs.push({
         anime:  o.a || '',
@@ -1030,13 +1043,13 @@
   function publishShared(pl) {
     var mini = packPayload(pl);
     return dbAPI.setDoc(dbAPI.doc(dbAPI.db, 'shared', pl.shareId), {
-      owner: currentUser.uid, n: mini.n, s: mini.s, u: new Date().toISOString()
+      owner: currentUser.uid, n: mini.n, cs: mini.cs, s: mini.s, u: new Date().toISOString()
     });
   }
 
   function removeShared(pl) {
     if (pl && pl.shareId && currentUser && dbAPI) {
-      dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'shared', pl.shareId)).catch(function (e) { console.error(e); });
+      dbAPI.deleteDoc(dbAPI.doc(dbAPI.doc(dbAPI.db, 'shared', pl.shareId))).catch(function (e) { console.error(e); });
       dbAPI.deleteDoc(dbAPI.doc(dbAPI.doc(dbAPI.db, 'explore_playlists', pl.shareId))).catch(function (e) { console.error(e); });
     }
   }
@@ -1048,9 +1061,8 @@
       if (location.hash !== '#s/' + id) return;
       if (!snap.exists()) { showError('此歌單已被下架或刪除。'); return; }
       var d = snap.data();
-      showPlayView(encodePlaylist(unpackPayload({ n: d.n, s: d.s })), false, id);
+      showPlayView(encodePlaylist(unpackPayload({ n: d.n, cs: d.cs, s: d.s })), false, id);
       
-      // 自動計算並更新觀看次數
       try {
         var expRef = dbAPI.doc(dbAPI.db, 'explore_playlists', id);
         var expSnap = await dbAPI.getDoc(expRef);
@@ -1062,6 +1074,52 @@
         console.warn('觀看次數更新跳過:', err);
       }
     }).catch(function (e) { showError('無法讀取歌單：' + (e.code || e.message)); });
+  }
+
+  function applyVinylCustomStyle(styleObj) {
+    var viewPlay = $('viewPlay');
+    var labelEl = $('label');
+    var vinylEl = document.querySelector('.vinyl');
+    if (!viewPlay) return;
+
+    styleObj = styleObj || {};
+
+    // 1. 外環顏色 (Vinyl Color)
+    if (vinylEl && styleObj.vinylColor) {
+      vinylEl.style.backgroundColor = styleObj.vinylColor;
+    }
+
+    // 2. 唱片中心圖片/顏色 (Center Color)
+    if (labelEl) {
+      if (styleObj.centerColor) {
+        labelEl.style.backgroundColor = styleObj.centerColor;
+      }
+    }
+
+    // 3. 大背景 (Background)
+    if (styleObj.bgType === 'image' && styleObj.bgImage) {
+      viewPlay.style.backgroundImage = 'url("' + styleObj.bgImage + '")';
+      viewPlay.style.backgroundSize = 'cover';
+      viewPlay.style.backgroundPosition = 'center';
+    } else if (styleObj.bgColor) {
+      viewPlay.style.backgroundImage = 'none';
+      viewPlay.style.backgroundColor = styleObj.bgColor;
+    } else {
+      viewPlay.style.backgroundImage = 'none';
+      viewPlay.style.backgroundColor = '';
+    }
+  }
+
+  function resetVinylCustomStyle() {
+    var viewPlay = $('viewPlay');
+    var vinylEl = document.querySelector('.vinyl');
+    if (viewPlay) {
+      viewPlay.style.backgroundImage = '';
+      viewPlay.style.backgroundColor = '';
+    }
+    if (vinylEl) {
+      vinylEl.style.backgroundColor = '';
+    }
   }
 
   function showPlayView(code, isPreview, sid) {
@@ -1100,6 +1158,10 @@
 
     if (!same) currentIndex = 0;
     show('viewPlay');
+    
+    // 渲染專屬自訂風格
+    applyVinylCustomStyle(playlist.customStyle);
+
     renderPlayMeta();
     renderDrawer();
     if (!same) initYTPlayer();
@@ -1132,8 +1194,17 @@
     if ($('anime')) $('anime').textContent = s.anime || '';
     if ($('title')) $('title').textContent = s.title || '未命名歌曲';
     if ($('artist')) $('artist').textContent = s.artist || '';
+    
     var url = thumbOf(s);
-    if ($('label')) $('label').style.backgroundImage = url ? 'url("' + url + '")' : '';
+    if ($('label')) {
+      var customCenterColor = (playlist && playlist.customStyle && playlist.customStyle.centerColor) ? playlist.customStyle.centerColor : '';
+      if (customCenterColor) {
+        $('label').style.backgroundImage = 'none';
+        $('label').style.backgroundColor = customCenterColor;
+      } else {
+        $('label').style.backgroundImage = url ? 'url("' + url + '")' : '';
+      }
+    }
     
     updateMediaSession();
     if ($('prevArrow')) $('prevArrow').classList.toggle('disabled', playMode === 'off' && currentIndex === 0);
@@ -1575,14 +1646,12 @@
     sec.hidden = !shown;
   }
 
-  /* ============ 播放模式 / 睡眠定時 / 外觀 ============ */
+  /* ============ 主題顏色與唱片風格設定 ============ */
   var MODES = [['off', '➡️ 順序'], ['all', '🔁 循環'], ['one', '🔂 單曲'], ['shuffle', '🔀 隨機']];
   var playMode = 'off';
   var SLEEP_OPTS = [0, 15, 30, 60], sleepIdx = 0, sleepAt = 0, sleepTick = null;
   var ACCENTS = [['青', '#00e5ff'], ['櫻', '#ff6fb5'], ['紫', '#a78bfa'], ['琥珀', '#ffb020'], ['薄荷', '#34d399'], ['紅蓮', '#ff4757']];
-  var VINYLS = [['經典黑', '#16161a'], ['血紅', '#7a1220'], ['冰藍', '#1c5f8a'], ['粉紅', '#a8326f'], ['金', '#8a6a1c'], ['紫', '#4b2a8a']];
-  var LABELS = [['cover', '封面圖'], ['solid', '純色'], ['gradient', '漸層']];
-  var THEME_DEFAULT = { accent: '#00e5ff', vinyl: '#16161a', groove: 16, label: 'cover' };
+  var THEME_DEFAULT = { accent: '#00e5ff' };
   var theme = Object.assign({}, THEME_DEFAULT);
 
   function pickNext(auto) {
@@ -1640,9 +1709,6 @@
     st.setProperty('--accent', th.accent);
     st.setProperty('--accent-rgb', c);
     st.setProperty('--accent-dim', 'rgba(' + c + ',.2)');
-    st.setProperty('--vinyl-a', th.vinyl);
-    st.setProperty('--groove', (th.groove / 100).toFixed(2));
-    document.body.setAttribute('data-label', th.label);
   }
 
   function saveTheme() {
@@ -1654,13 +1720,7 @@
       var m = localStorage.getItem('anime-vinyl:mode');
       if (MODES.some(function (x) { return x[0] === m; })) playMode = m;
       var t = JSON.parse(localStorage.getItem('anime-vinyl:theme'));
-      if (t) {
-        var hex = /^#[0-9a-f]{6}$/i;
-        if (hex.test(t.accent)) theme.accent = t.accent;
-        if (hex.test(t.vinyl)) theme.vinyl = t.vinyl;
-        if (t.groove >= 0 && t.groove <= 50) theme.groove = +t.groove;
-        if (LABELS.some(function (x) { return x[0] === t.label; })) theme.label = t.label;
-      }
+      if (t && /^#[0-9a-f]{6}$/i.test(t.accent)) theme.accent = t.accent;
     } catch (e) {}
     applyTheme();
 
@@ -1679,60 +1739,48 @@
       if (playlist) renderPlayMeta();
     });
 
-    $('sleepBtn').addEventListener('click', function () {
-      sleepIdx = (sleepIdx + 1) % SLEEP_OPTS.length;
-      var min = SLEEP_OPTS[sleepIdx];
-      setSleep(min);
-      sleepIdx = SLEEP_OPTS.indexOf(min);
-      if (min) toast('將在 ' + min + ' 分鐘後停止播放'); else toast('已取消睡眠定時');
-    });
+    if ($('sleepBtn')) {
+      $('sleepBtn').addEventListener('click', function () {
+        sleepIdx = (sleepIdx + 1) % SLEEP_OPTS.length;
+        var min = SLEEP_OPTS[sleepIdx];
+        setSleep(min);
+        sleepIdx = SLEEP_OPTS.indexOf(min);
+        if (min) toast('將在 ' + min + ' 分鐘後停止播放'); else toast('已取消睡眠定時');
+      });
+    }
     document.addEventListener('visibilitychange', function () { if (!document.hidden) tickSleep(); });
 
-    var accentBox = $('accentSwatches'), vinylBox = $('vinylSwatches'), seg = $('labelSeg');
-    var accentPick = $('accentPicker'), vinylPick = $('vinylPicker'), grooveRange = $('grooveRange');
+    var accentBox = $('accentSwatches');
+    var accentPick = $('accentPicker');
 
     function refreshUI() {
-      Array.prototype.forEach.call(accentBox.children, function (b) { b.classList.toggle('active', b.dataset.c === theme.accent); });
-      Array.prototype.forEach.call(vinylBox.children, function (b) { b.classList.toggle('active', b.dataset.c === theme.vinyl); });
-      Array.prototype.forEach.call(seg.children, function (b) { b.classList.toggle('active', b.dataset.k === theme.label); });
-      if (accentPick.value !== theme.accent) accentPick.value = theme.accent;
-      if (vinylPick.value !== theme.vinyl) vinylPick.value = theme.vinyl;
-      grooveRange.value = theme.groove;
+      if (accentBox) {
+        Array.prototype.forEach.call(accentBox.children, function (b) { b.classList.toggle('active', b.dataset.c === theme.accent); });
+      }
+      if (accentPick && accentPick.value !== theme.accent) accentPick.value = theme.accent;
     }
+
     function change() { applyTheme(); saveTheme(); refreshUI(); }
 
-    function addSwatches(box, items, key) {
-      box.innerHTML = '';
-      items.forEach(function (it) {
+    if (accentBox) {
+      accentBox.innerHTML = '';
+      ACCENTS.forEach(function (it) {
         var b = document.createElement('button');
         b.type = 'button';
         b.className = 'swatch';
         b.dataset.c = it[1];
         b.setAttribute('aria-label', it[0]);
         b.style.background = it[1];
-        b.addEventListener('click', function () { theme[key] = it[1]; change(); });
-        box.appendChild(b);
+        b.addEventListener('click', function () { theme.accent = it[1]; change(); });
+        accentBox.appendChild(b);
       });
     }
-    addSwatches(accentBox, ACCENTS, 'accent');
-    addSwatches(vinylBox, VINYLS, 'vinyl');
-    seg.innerHTML = '';
-    LABELS.forEach(function (it) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = it[1];
-      b.dataset.k = it[0];
-      b.addEventListener('click', function () { theme.label = it[0]; change(); });
-      seg.appendChild(b);
-    });
-    accentPick.addEventListener('input', function () { theme.accent = accentPick.value; change(); });
-    vinylPick.addEventListener('input', function () { theme.vinyl = vinylPick.value; change(); });
-    grooveRange.addEventListener('input', function () { theme.groove = +grooveRange.value; change(); });
-    $('themeReset').addEventListener('click', function () { theme = Object.assign({}, THEME_DEFAULT); change(); });
+
+    if (accentPick) accentPick.addEventListener('input', function () { theme.accent = accentPick.value; change(); });
+    if ($('themeReset')) $('themeReset').addEventListener('click', function () { theme = Object.assign({}, THEME_DEFAULT); change(); });
     refreshUI();
 
     var modal = $('themeModal');
-    
     function openThemeModal() {
       refreshUI();
       if (modal) {
@@ -1748,11 +1796,118 @@
       }
     }
 
-    $('themeBtn').addEventListener('click', openThemeModal);
-    $('themeDone').addEventListener('click', closeThemeModal);
-    modal.addEventListener('click', function (e) { 
-      if (e.target === modal) closeThemeModal(); 
-    });
+    if ($('themeBtn')) $('themeBtn').addEventListener('click', openThemeModal);
+    if ($('themeDone')) $('themeDone').addEventListener('click', closeThemeModal);
+    if (modal) modal.addEventListener('click', function (e) { if (e.target === modal) closeThemeModal(); });
+
+    // 綁定「自訂唱片風格」模組與按鈕邏輯
+    bindVinylStyleModal();
+  }
+
+  /* ============ 自訂唱片風格模組與綁定 ============ */
+  function bindVinylStyleModal() {
+    var modal = $('vinylStyleModal');
+    var btn = $('themeBtnPlay'); // 播放頁面上的按鈕，名稱為「自訂唱片風格」
+
+    if (!modal || !btn) return;
+
+    function openModal() {
+      if (!playlist) return;
+      if (!playlist.customStyle) {
+        playlist.customStyle = { vinylColor: '#16161a', centerColor: '', bgType: 'color', bgColor: '#0a0a0c', bgImage: '' };
+      }
+
+      if ($('vinylColorPicker')) $('vinylColorPicker').value = playlist.customStyle.vinylColor || '#16161a';
+      if ($('centerColorPicker')) $('centerColorPicker').value = playlist.customStyle.centerColor || '#000000';
+      if ($('bgColorPicker')) $('bgColorPicker').value = playlist.customStyle.bgColor || '#0a0a0c';
+
+      modal.hidden = false;
+      requestAnimationFrame(() => modal.classList.add('show'));
+    }
+
+    function closeModal() {
+      modal.classList.remove('show');
+      setTimeout(() => { modal.hidden = true; }, 300);
+    }
+
+    btn.addEventListener('click', openModal);
+    if ($('vinylStyleDone')) $('vinylStyleDone').addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+
+    // 1. 唱片外環顏色
+    if ($('vinylColorPicker')) {
+      $('vinylColorPicker').addEventListener('input', function (e) {
+        if (!playlist.customStyle) playlist.customStyle = {};
+        playlist.customStyle.vinylColor = e.target.value;
+        applyVinylCustomStyle(playlist.customStyle);
+        saveDraft();
+      });
+    }
+
+    // 2. 唱片中心顏色 (空字串時自動回復封面)
+    if ($('centerColorPicker')) {
+      $('centerColorPicker').addEventListener('input', function (e) {
+        if (!playlist.customStyle) playlist.customStyle = {};
+        playlist.customStyle.centerColor = e.target.value;
+        renderPlayMeta();
+        saveDraft();
+      });
+    }
+
+    if ($('resetCenterColorBtn')) {
+      $('resetCenterColorBtn').addEventListener('click', function () {
+        if (!playlist.customStyle) playlist.customStyle = {};
+        playlist.customStyle.centerColor = '';
+        renderPlayMeta();
+        saveDraft();
+        toast('已重設為歌曲封面');
+      });
+    }
+
+    // 3. 背景顏色選擇
+    if ($('bgColorPicker')) {
+      $('bgColorPicker').addEventListener('input', function (e) {
+        if (!playlist.customStyle) playlist.customStyle = {};
+        playlist.customStyle.bgType = 'color';
+        playlist.customStyle.bgColor = e.target.value;
+        applyVinylCustomStyle(playlist.customStyle);
+        saveDraft();
+      });
+    }
+
+    // 4. 背景圖片上傳
+    if ($('bgImageInput')) {
+      $('bgImageInput').addEventListener('change', function (e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+          toast('圖片檔案過大，請選擇 2MB 以下的圖片');
+          return;
+        }
+        var reader = new FileReader();
+        reader.onload = function (evt) {
+          if (!playlist.customStyle) playlist.customStyle = {};
+          playlist.customStyle.bgType = 'image';
+          playlist.customStyle.bgImage = evt.target.result;
+          applyVinylCustomStyle(playlist.customStyle);
+          saveDraft();
+          toast('已成功上傳自訂背景');
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    if ($('resetBgBtn')) {
+      $('resetBgBtn').addEventListener('click', function () {
+        if (!playlist.customStyle) playlist.customStyle = {};
+        playlist.customStyle.bgType = 'color';
+        playlist.customStyle.bgColor = '#0a0a0c';
+        playlist.customStyle.bgImage = '';
+        applyVinylCustomStyle(playlist.customStyle);
+        saveDraft();
+        toast('已重設為預設背景');
+      });
+    }
   }
 
   function bindEditorControls() {
@@ -2109,7 +2264,7 @@
         
         if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
         clearTimeout(autoSaveTimer);
-        var docRef = dbAPI.doc(dbAPI.db, 'playlists', uid);
+        var docRef = dbAPI.doc(dbAPI.doc(dbAPI.db, 'playlists', uid));
         authAPI.reauthenticateWithPopup(currentUser, authAPI.provider)
           .then(function () {
             return Promise.all(state.playlists.filter(function (p) { return p.shareId; }).map(function (p) {
