@@ -65,6 +65,16 @@
     return state.playlists.find(function (p) { return p.id === currentPlaylistId; });
   }
 
+  function newShareId() {
+    return (Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 8);
+  }
+
+  function syncPublicUI(pl) {
+    if ($('playlistIsPublic')) $('playlistIsPublic').checked = !!pl.isPublic;
+    if ($('playlistNick')) $('playlistNick').value = pl.nick || '';
+    if ($('publicNickWrap')) $('publicNickWrap').hidden = !pl.isPublic;
+  }
+
   function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
@@ -106,6 +116,11 @@
     if (!currentUser || !dbAPI) return;
     if (!cloudReady) { if (!silent) toast('雲端尚未連線，請稍後再試'); return; }
     try {
+      var cp0 = getCurrentPlaylist();
+      if (cp0 && cp0.isPublic) {
+        if (!cp0.shareId) cp0.shareId = newShareId();
+        cp0.explored = true;
+      }
       var docRef = dbAPI.doc(dbAPI.db, 'playlists', currentUser.uid);
       await dbAPI.setDoc(docRef, {
         playlists: state.playlists,
@@ -114,19 +129,18 @@
       
       var cp = getCurrentPlaylist();
       if (cp) {
-        if (cp.shareId) publishShared(cp).catch(function (e) { console.error(e); });
-        
+        if (cp.shareId && (cp.isPublic || cp.explored)) publishShared(cp).catch(function (e) { console.error(e); });
         if (cp.isPublic) {
           publishExplorePlaylist(cp).catch(function (e) { console.error(e); });
-        } else if (cp.shareId) {
+        } else if (cp.explored && cp.shareId) {
           dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'explore_playlists', cp.shareId))
-            .then(function() {
+            .then(function () {
+              cp.explored = false;
+              saveDraft();
+              saveDraftToCloud(true);
               toast('🌐 已從探索廣場下架');
             })
-            .catch(function (e) { 
-              console.error('下架廣場歌單失敗', e);
-              toast('⚠️ 下架失敗：權限不足或資料不存在');
-            });
+            .catch(function (e) { console.error('下架失敗', e); });
         }
       }
       if (!silent) toast('☁️ 已儲存至雲端');
@@ -149,7 +163,7 @@
     await dbAPI.setDoc(exploreRef, {
       id: pl.shareId,
       name: pl.name || '未命名歌單',
-      ownerName: currentUser.displayName || '動漫迷',
+      ownerName: (pl.nick || '匿名動漫迷').slice(0, 20),
       ownerUid: currentUser.uid,
       songsCount: validSongs.length,
       coverUrl: thumbOf(validSongs[0]),
@@ -193,15 +207,11 @@
       renderHistory();
     } else if (hash.indexOf('#edit/') === 0 && !wasDirty) {
       var pl = getCurrentPlaylist();
-      if (pl) { 
-        $('playlistName').value = pl.name; 
-        if ($('playlistIsPublic')) $('playlistIsPublic').checked = !!pl.isPublic;
-        renderEditor(); 
+      if (pl) {
+        $('playlistName').value = pl.name;
+        syncPublicUI(pl);
+        renderEditor();
       }
-    } else if (hash === '#nfc') {
-      showNfcView();
-    } else if (hash === '#explore') {
-      showExploreView();
     }
   }
 
@@ -434,55 +444,67 @@
     show('viewExplore');
     var grid = $('exploreGrid');
     if (!grid) return;
-    grid.innerHTML = '<p style="text-align:center; color: var(--text-muted); font-size:14px; margin-top:20px;">載入探索廣場歌單中...</p>';
-
-    if (!dbAPI) {
-      grid.innerHTML = '<p style="text-align:center; color: var(--text-muted); font-size:14px; margin-top:20px;">資料庫未連線</p>';
-      return;
+    function msg(t, c) {
+      grid.innerHTML = '';
+      var p = document.createElement('p');
+      p.style.cssText = 'text-align:center;font-size:14px;margin-top:20px;color:' + (c || 'var(--text-muted)');
+      p.textContent = t;
+      grid.appendChild(p);
     }
-
+    msg('載入探索廣場歌單中...');
+    if (!dbAPI) { msg('資料庫未連線'); return; }
     try {
-      var q = dbAPI.query(
-        dbAPI.collection(dbAPI.db, 'explore_playlists'),
-        dbAPI.limit(30)
-      );
-      
+      var q = dbAPI.query(dbAPI.collection(dbAPI.db, 'explore_playlists'), dbAPI.orderBy('updatedAt', 'desc'), dbAPI.limit(30));
       var snap = await dbAPI.getDocs(q);
       var list = [];
-      snap.forEach(doc => list.push(doc.data()));
-
-      if (!list.length) {
-        grid.innerHTML = '<p style="text-align:center; color: var(--text-muted); font-size:14px; margin-top:20px;">廣場目前還沒有公開歌單，快成為第一個發布的人吧！</p>';
-        return;
-      }
-
+      snap.forEach(function (d) { var x = d.data(); x._id = d.id; list.push(x); });
+      if (!list.length) { msg('廣場目前還沒有公開歌單，快成為第一個發布的人吧！'); return; }
       grid.innerHTML = '';
       list.forEach(function (item) {
-        var card = document.createElement('div');
-        card.className = 'playlist-card';
-        card.innerHTML =
-          '<a class="pc-left" href="#s/' + esc(item.id) + '">' +
-            '<span class="hist-cover" style="background-image: url(\'' + esc(item.coverUrl || '') + '\')"></span>' +
-            '<span class="pc-info">' +
-              '<span class="pc-title">' + esc(item.name || '未命名歌單') + '</span>' +
-              '<span class="pc-meta">由 ' + esc(item.ownerName || '創作者') + ' 分享 · ' + (item.songsCount || 0) + ' 首</span>' +
-            '</span>' +
-          '</a>' +
-          (currentUser ? '<button type="button" class="icon-btn" title="複製到我的歌單">＋</button>' : '');
-
-        var addBtn = card.querySelector('button');
-        if (addBtn) {
-          addBtn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            copyExplorePlaylistToMine(item);
-          });
+        if (!/^[a-z0-9]{6,12}$/.test(item._id)) return;
+        var row = document.createElement('div');
+        row.className = 'playlist-card';
+        row.innerHTML = '<a class="pc-left"><span class="hist-cover"></span><span class="pc-info"><span class="pc-title"></span><span class="pc-meta"></span></span></a>' +
+          '<div style="display:flex;gap:6px;flex-shrink:0;"></div>';
+        row.querySelector('a').setAttribute('href', '#s/' + item._id);
+        row.querySelector('.pc-title').textContent = item.name || '未命名歌單';
+        row.querySelector('.pc-meta').textContent = '由 ' + (item.ownerName || '匿名動漫迷') + ' 分享 · ' + (item.songsCount || 0) + ' 首';
+        if (/^https?:\/\//i.test(item.coverUrl || '')) {
+          row.querySelector('.hist-cover').style.backgroundImage = 'url("' + item.coverUrl.replace(/"/g, '%22') + '")';
         }
-        grid.appendChild(card);
+        var box = row.lastChild;
+        if (currentUser) {
+          var add = document.createElement('button');
+          add.type = 'button'; add.className = 'icon-btn'; add.textContent = '＋';
+          add.title = '複製到我的歌單'; add.setAttribute('aria-label', '複製到我的歌單');
+          add.addEventListener('click', function () { copyExplorePlaylistToMine(item); });
+          box.appendChild(add);
+          var rep = document.createElement('button');
+          rep.type = 'button'; rep.className = 'icon-btn'; rep.textContent = '🚩';
+          rep.title = '檢舉'; rep.setAttribute('aria-label', '檢舉這份歌單');
+          rep.addEventListener('click', function () { reportExplore(item); });
+          box.appendChild(rep);
+        }
+        grid.appendChild(row);
       });
     } catch (e) {
       console.error('載入廣場失敗', e);
-      grid.innerHTML = '<p style="text-align:center; color: #ff9e9e; font-size:14px; margin-top:20px;">無法載入探索廣場，請稍後再試。</p>';
+      msg('無法載入探索廣場，請稍後再試。', '#ff9e9e');
     }
+  }
+
+  function reportExplore(item) {
+    if (!currentUser) { toast('請先登入才能檢舉'); return; }
+    var reason = prompt('請簡述檢舉原因（例如：侵權、不當內容、垃圾訊息）：');
+    if (!reason || !reason.trim()) return;
+    dbAPI.setDoc(dbAPI.doc(dbAPI.collection(dbAPI.db, 'reports')), {
+      target: item._id,
+      name: String(item.name || '').slice(0, 80),
+      reason: reason.trim().slice(0, 200),
+      reporter: currentUser.uid,
+      at: Date.now()
+    }).then(function () { toast('已送出檢舉，謝謝你的回報'); })
+      .catch(function (e) { toast('檢舉失敗：' + (e.code || e.message)); });
   }
 
   function copyExplorePlaylistToMine(item) {
@@ -514,6 +536,11 @@
 
   /* ============ NFC 專屬視圖邏輯 ============ */
   function showNfcView() {
+    if (!currentUser) {
+      toast('請先登入才能使用 NFC 寫入工具');
+      location.hash = '#home';
+      return;
+    }
     show('viewNfc');
     
     var isSupported = 'NDEFReader' in window;
@@ -559,12 +586,17 @@
     
     var base = location.origin + location.pathname + location.search;
     var targetUrl = '';
-    
-    if (pl.shareId && currentUser && dbAPI && cloudReady) {
-      targetUrl = base + '#s/' + pl.shareId;
-    } else {
-      targetUrl = base + '#play/' + encodePlaylist(pl);
+    if (!currentUser || !dbAPI || !cloudReady) { toast('請先登入並等待雲端連線，才能寫入短網址'); return; }
+    if (!pl.songs.some(function (x) { return parseVideoId(x.videoId); })) { toast('這份歌單還沒有有效的歌曲'); return; }
+    try {
+      if (!pl.shareId) { pl.shareId = newShareId(); pl.updatedAt = new Date().toISOString(); saveDraft(); }
+      await publishShared(pl);
+      saveDraftToCloud(true);
+    } catch (e) {
+      toast('短網址建立失敗：' + (e.code || e.message), 5000);
+      return;
     }
+    targetUrl = base + '#s/' + pl.shareId;
 
     try {
       var ndef = new NDEFReader();
@@ -657,7 +689,7 @@
     isDirty = false;
     
     if ($('playlistName')) $('playlistName').value = pl.name;
-    if ($('playlistIsPublic')) $('playlistIsPublic').checked = !!pl.isPublic;
+    syncPublicUI(pl);
     if ($('saveStatus')) $('saveStatus').textContent = '';
     renderEditor();
     show('viewEdit');
@@ -972,10 +1004,10 @@
     if ($('label')) $('label').style.backgroundImage = url ? 'url("' + url + '")' : '';
     
     updateMediaSession();
-    if ($('prevArrow')) $('prevArrow').classList.toggle('disabled', currentIndex === 0);
-    if ($('nextArrow')) $('nextArrow').classList.toggle('disabled', currentIndex >= playlist.songs.length - 1);
-    if ($('prevBtn')) $('prevBtn').disabled = currentIndex === 0;
-    if ($('nextBtn')) $('nextBtn').disabled = currentIndex >= playlist.songs.length - 1;
+    if ($('prevArrow')) $('prevArrow').classList.toggle('disabled', playMode === 'off' && currentIndex === 0);
+    if ($('nextArrow')) $('nextArrow').classList.toggle('disabled', playMode === 'off' && currentIndex >= playlist.songs.length - 1);
+    if ($('prevBtn')) $('prevBtn').disabled = playMode === 'off' && currentIndex === 0;
+    if ($('nextBtn')) $('nextBtn').disabled = playMode === 'off' && currentIndex >= playlist.songs.length - 1;
   }
 
   function initYTPlayer() {
@@ -1208,9 +1240,9 @@
       vinyl.style.transform = 'translateX(0) rotate(0) translateZ(0)';
 
       if (isSwiping && Math.abs(diffX) > 50 && Math.abs(diffY) < 80) {
-        if (diffX > 0 && currentIndex > 0) {
+        if (diffX > 0) {
           goToSong(pickPrev());
-        } else if (diffX < 0 && currentIndex < playlist.songs.length - 1) {
+        } else if (diffX < 0) {
           goToSong(pickNext(false));
         }
       }
@@ -1496,6 +1528,7 @@
       playMode = MODES[(i + 1) % MODES.length][0];
       try { localStorage.setItem('anime-vinyl:mode', playMode); } catch (e) {}
       showMode();
+      if (playlist) renderPlayMeta();
     });
 
     $('sleepBtn').addEventListener('click', function () {
@@ -1575,6 +1608,10 @@
   }
 
   function bindEditorControls() {
+    if ($('playlistNick')) $('playlistNick').addEventListener('input', function (e) {
+      var pl = getCurrentPlaylist();
+      if (pl) { pl.nick = e.target.value.slice(0, 20); markDirty(); }
+    });
     if ($('createPlaylistBtn')) $('createPlaylistBtn').addEventListener('click', function () {
       if (!currentUser) return;
       var newPl = createEmptyPlaylist('新歌單 ' + (state.playlists.length + 1));
@@ -1596,6 +1633,7 @@
       var pl = getCurrentPlaylist();
       if (pl) {
         pl.isPublic = e.target.checked;
+        syncPublicUI(pl);
         markDirty();
       }
     });
@@ -1929,7 +1967,9 @@
         authAPI.reauthenticateWithPopup(currentUser, authAPI.provider)
           .then(function () {
             return Promise.all(state.playlists.filter(function (p) { return p.shareId; }).map(function (p) {
-              return dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'shared', p.shareId));
+              return Promise.all(['shared', 'explore_playlists'].map(function (col) {
+                return dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, col, p.shareId)).catch(function () {});
+              }));
             }));
           })
           .then(function () { return dbAPI.deleteDoc(docRef); })
