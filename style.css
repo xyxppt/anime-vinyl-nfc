@@ -432,3 +432,52 @@ body[data-label="gradient"] .vinyl-label { background: conic-gradient(from 0deg,
   body.play-mode .extras .pill { padding: 5px 10px; font-size: 12px; }
   body.play-mode .btn.primary { width: 60px; height: 60px; }
 }
+/* ===== 探索廣場未登入遮罩牆 ===== */
+.explore-guest-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* 將歌單列表底部做透明漸層淡出 */
+.explore-guest-wrapper.blurred .playlist-grid {
+  max-height: 380px; /* 控制未登入時可見的大約高度 */
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 40%, rgba(0, 0, 0, 0) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 40%, rgba(0, 0, 0, 0) 100%);
+  pointer-events: none; /* 防止點擊到半透明處的歌單 */
+}
+
+/* 疊加在淡出區域中央的登入提示卡片 */
+.explore-login-overlay {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  background: rgba(18, 20, 26, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--accent-dim);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+  text-align: center;
+  z-index: 10;
+}
+
+.explore-login-overlay p {
+  font-size: 14px;
+  color: var(--text-main);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.explore-login-overlay .btn-block {
+  width: auto;
+  min-width: 200px;
+  padding: 12px 24px;
+  font-size: 15px;
+}
