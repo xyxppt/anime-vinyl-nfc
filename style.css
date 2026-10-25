@@ -299,24 +299,18 @@ body.play-mode {
   inset: 0; 
   overflow: hidden; 
   overscroll-behavior: none; 
-  /* 移除 touch-action: none，改為只在非互動區域限制 */
 }
-
-/* 確保播放頁內的互動元素可以正常接收觸控 */
 body.play-mode .play-wrap,
 body.play-mode .btn,
 body.play-mode .nav-arrow,
 body.play-mode .seek,
 body.play-mode .drawer-toggle,
 body.play-mode .pill {
-  touch-action: manipulation; /* 允許點擊和簡單手勢，禁止縮放 */
+  touch-action: manipulation;
 }
-
-/* 背景或非互動區域才禁止觸控 */
 body.play-mode .plinth-wrapper {
-  touch-action: pan-x; /* 允許橫向滑動切歌 */
+  touch-action: pan-x;
 }
-
 body.play-mode .play-wrap { gap: clamp(8px, 2dvh, 20px); }
 body.play-mode .plinth-wrapper { width: min(85vw, 340px, 36dvh); margin-top: 0; }
 .drawer-list { touch-action: pan-y; }
@@ -340,11 +334,9 @@ body.playing .eq i { animation-play-state: running; }
 .btn.primary .ripple, .btn-block.primary .ripple, .btn-save .ripple { background: rgba(0,0,0,.22); }
 @keyframes ripple { to { transform: scale(1); opacity: 0; } }
 
-/* 播放中的主按鈕呼吸光暈 */
 body.playing .btn.primary { animation: glowpulse 1.8s ease-in-out infinite; }
 @keyframes glowpulse { 0%, 100% { box-shadow: 0 0 20px var(--accent-dim), inset 0 1px 2px rgba(255,255,255,.5); } 50% { box-shadow: 0 0 38px 8px rgba(var(--accent-rgb), .45), inset 0 1px 2px rgba(255,255,255,.5); } }
 
-/* 主要按鈕的流光 */
 .btn-block.primary::before, .btn-save::before { content: ""; position: absolute; top: 0; left: -60%; width: 40%; height: 100%; background: linear-gradient(105deg, transparent, rgba(255,255,255,.5), transparent); transform: skewX(-20deg); pointer-events: none; }
 .btn-block.primary:active::before, .btn-save:active::before { animation: sweep .6s ease-out; }
 @keyframes sweep { to { left: 130%; } }
@@ -400,7 +392,7 @@ body.play-mode .plinth-wrapper { width: min(85vw, 340px, 32dvh); }
 .seg button { flex: 1; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); color: var(--text-main); padding: 9px 0; border-radius: 10px; font-size: 13px; }
 .seg button.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px var(--accent-dim); }
 
-/* ===== 唱片紋路(同心紋路 + 旋轉時可見的反光) ===== */
+/* ===== 唱片紋路 ===== */
 .vinyl, .vinyl-face {
   background:
     conic-gradient(from 25deg, transparent 0deg, rgba(255,255,255,.22) 26deg, transparent 60deg, transparent 180deg, rgba(255,255,255,.15) 206deg, transparent 240deg),
@@ -423,7 +415,6 @@ body[data-label="gradient"] .vinyl-label { background: conic-gradient(from 0deg,
 .picker-row input[type="range"] { flex: 1; accent-color: var(--accent); }
 
 .pill[hidden] { display: none; }
-/* 矮螢幕手機:縮小版面,避免下方被切掉 */
 @media (max-height: 740px) {
   body.play-mode .eq { display: none; }
   body.play-mode .plinth-wrapper { width: min(85vw, 340px, 30dvh); }
@@ -432,38 +423,38 @@ body[data-label="gradient"] .vinyl-label { background: conic-gradient(from 0deg,
   body.play-mode .extras .pill { padding: 5px 10px; font-size: 12px; }
   body.play-mode .btn.primary { width: 60px; height: 60px; }
 }
-/* ===== 探索廣場未登入遮罩牆 ===== */
+
+/* ===== 探索廣場未登入遮罩牆 (修改為上透下實) ===== */
 .explore-guest-wrapper {
   position: relative;
   width: 100%;
 }
 
-/* 將歌單列表底部做透明漸層淡出 */
+/* 歌單列表：上到下由半透明漸漸變為實體 (上透下實) */
 .explore-guest-wrapper.blurred .playlist-grid {
-  max-height: 380px; /* 控制未登入時可見的大約高度 */
+  max-height: 380px;
   overflow: hidden;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 40%, rgba(0, 0, 0, 0) 100%);
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 40%, rgba(0, 0, 0, 0) 100%);
-  pointer-events: none; /* 防止點擊到半透明處的歌單 */
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 1) 85%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 1) 85%);
 }
 
-/* 疊加在淡出區域中央的登入提示卡片 */
+/* 登入提示卡片：使用相對定位與適當間距，接在歌單下方穩定不漂浮 */
 .explore-login-overlay {
-  position: absolute;
-  bottom: 10px;
-  left: 0;
-  right: 0;
+  position: relative;
+  margin: -40px auto 20px auto;
+  max-width: 480px;
+  width: 90%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px 20px;
-  background: rgba(18, 20, 26, 0.85);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(18, 20, 26, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--accent-dim);
   border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.85);
   text-align: center;
   z-index: 10;
 }
