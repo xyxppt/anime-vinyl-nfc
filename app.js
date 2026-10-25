@@ -102,7 +102,7 @@
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
   }
 
-  async function saveDraftToCloud(silent) {
+async function saveDraftToCloud(silent) {
     if (!currentUser || !dbAPI) return;
     if (!cloudReady) { if (!silent) toast('雲端尚未連線，請稍後再試'); return; }
     try {
@@ -114,8 +114,17 @@
       
       var cp = getCurrentPlaylist();
       if (cp) {
+        // 若有 shareId 且有分享，發布短網址
         if (cp.shareId) publishShared(cp).catch(function (e) { console.error(e); });
-        if (cp.isPublic) publishExplorePlaylist(cp).catch(function (e) { console.error(e); });
+        
+        // 判斷是否公開：若勾選則同步至廣場；若取消勾選則從廣場下架刪除
+        if (cp.isPublic) {
+          publishExplorePlaylist(cp).catch(function (e) { console.error(e); });
+        } else if (cp.shareId) {
+          // 下架刪除
+          dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'explore_playlists', cp.shareId))
+            .catch(function (e) { console.error('下架廣場歌單失敗', e); });
+        }
       }
       if (!silent) toast('☁️ 已儲存至雲端');
     } catch (e) {
