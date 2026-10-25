@@ -120,6 +120,7 @@
       if (cp0 && cp0.isPublic) {
         if (!cp0.shareId) cp0.shareId = newShareId();
         cp0.explored = true;
+        saveDraft();
       }
       var docRef = dbAPI.doc(dbAPI.db, 'playlists', currentUser.uid);
       await dbAPI.setDoc(docRef, {
@@ -131,7 +132,7 @@
       if (cp) {
         if (cp.shareId && (cp.isPublic || cp.explored)) publishShared(cp).catch(function (e) { console.error(e); });
         if (cp.isPublic) {
-          publishExplorePlaylist(cp).catch(function (e) { console.error(e); });
+          publishExplorePlaylist(cp).catch(function (e) { console.error(e); toast('⚠️ 廣場更新失敗：' + (e.code || e.message), 5000); });
         } else if (cp.explored && cp.shareId) {
           dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'explore_playlists', cp.shareId))
             .then(function () {
@@ -172,6 +173,20 @@
     }, { merge: true });
   }
 
+  // 讓廣場和「我目前公開的歌單」一致:刪掉我名下已經不對應任何公開歌單的舊文件(例如重複的)
+  function cleanupExplore() {
+    if (!currentUser || !dbAPI || !dbAPI.where) return;
+    var keep = {};
+    state.playlists.forEach(function (p) { if (p.isPublic && p.shareId) keep[p.shareId] = 1; });
+    dbAPI.getDocs(dbAPI.query(dbAPI.collection(dbAPI.db, 'explore_playlists'), dbAPI.where('ownerUid', '==', currentUser.uid)))
+      .then(function (snap) {
+        snap.forEach(function (d) {
+          if (!keep[d.id]) dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'explore_playlists', d.id)).catch(function (e) { console.error(e); });
+        });
+      })
+      .catch(function (e) { console.error('清理廣場失敗', e); });
+  }
+
   function isBlankPlaylist(pl) {
     return !(pl.songs || []).some(function (s) { return s.title || s.videoId || s.anime || s.artist; });
   }
@@ -188,6 +203,13 @@
   }
 
   function applyRemote(remote, wasDirty) {
+    // 雲端舊資料可能還沒有 shareId,保留本機已有的,避免重複建立廣場文件
+    var localById = {};
+    state.playlists.forEach(function (p) { localById[p.id] = p; });
+    remote.forEach(function (p) {
+      var l = localById[p.id];
+      if (l && l.shareId && !p.shareId) p.shareId = l.shareId;
+    });
     if (!wasDirty) { state.playlists = remote; return; }
     var cur = getCurrentPlaylist();
     state.playlists = remote.filter(function (p) { return !cur || p.id !== cur.id; }).concat(cur ? [cur] : []);
@@ -235,6 +257,7 @@
         if (JSON.stringify(state.playlists) !== JSON.stringify(remotePl)) saveDraftToCloud(true);
         if (JSON.stringify(playHistory) !== JSON.stringify(remoteHist)) saveHistoryToCloud();
         refreshView(wasDirty);
+        cleanupExplore();
         return;
       }
       if (snap.metadata.hasPendingWrites) return;
@@ -479,11 +502,19 @@
           add.title = '複製到我的歌單'; add.setAttribute('aria-label', '複製到我的歌單');
           add.addEventListener('click', function () { copyExplorePlaylistToMine(item); });
           box.appendChild(add);
-          var rep = document.createElement('button');
-          rep.type = 'button'; rep.className = 'icon-btn'; rep.textContent = '🚩';
-          rep.title = '檢舉'; rep.setAttribute('aria-label', '檢舉這份歌單');
-          rep.addEventListener('click', function () { reportExplore(item); });
-          box.appendChild(rep);
+          if (item.ownerUid === currentUser.uid) {
+            var del = document.createElement('button');
+            del.type = 'button'; del.className = 'icon-btn danger'; del.textContent = '🗑';
+            del.title = '從廣場下架'; del.setAttribute('aria-label', '從探索廣場下架');
+            del.addEventListener('click', function () { unpublishExplore(item, row); });
+            box.appendChild(del);
+          } else {
+            var rep = document.createElement('button');
+            rep.type = 'button'; rep.className = 'icon-btn'; rep.textContent = '🚩';
+            rep.title = '檢舉'; rep.setAttribute('aria-label', '檢舉這份歌單');
+            rep.addEventListener('click', function () { reportExplore(item); });
+            box.appendChild(rep);
+          }
         }
         grid.appendChild(row);
       });
@@ -491,6 +522,20 @@
       console.error('載入廣場失敗', e);
       msg('無法載入探索廣場，請稍後再試。', '#ff9e9e');
     }
+  }
+
+  function unpublishExplore(item, row) {
+    if (!confirm('要把「' + (item.name || '這份歌單') + '」從探索廣場下架嗎？\n（你自己的歌單不會被刪除）')) return;
+    var inUse = state.playlists.some(function (p) { return p.shareId === item._id; });
+    var jobs = [dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'explore_playlists', item._id))];
+    if (!inUse) jobs.push(dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'shared', item._id)).catch(function () {}));
+    Promise.all(jobs).then(function () {
+      state.playlists.forEach(function (p) { if (p.shareId === item._id) { p.isPublic = false; p.explored = false; } });
+      saveDraft();
+      saveDraftToCloud(true);
+      if (row.parentNode) row.parentNode.removeChild(row);
+      toast('已從探索廣場下架');
+    }).catch(function (e) { toast('下架失敗：' + (e.code || e.message)); });
   }
 
   function reportExplore(item) {
