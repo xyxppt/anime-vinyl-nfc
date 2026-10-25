@@ -162,6 +162,9 @@
     }
 
     var exploreRef = dbAPI.doc(dbAPI.db, 'explore_playlists', pl.shareId);
+    var docSnap = await dbAPI.getDoc(exploreRef).catch(function () { return { exists: function () { return false; } }; });
+    var currentViews = (docSnap && docSnap.exists() && docSnap.data().views !== undefined) ? docSnap.data().views : 0;
+
     await dbAPI.setDoc(exploreRef, {
       id: pl.shareId,
       name: pl.name || '未命名歌單',
@@ -170,7 +173,8 @@
       songsCount: validSongs.length,
       coverUrl: thumbOf(validSongs[0]),
       songs: validSongs,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      views: currentViews
     }, { merge: true });
   }
 
@@ -487,7 +491,7 @@
     });
   }
 
-  /* ============ 探索廣場視圖邏輯 (標準版) ============ */
+  /* ============ 探索廣場視圖邏輯 (含純文字瀏覽次數) ============ */
   async function showExploreView() {
     show('viewExplore');
     var grid = $('exploreGrid');
@@ -505,12 +509,20 @@
     if (!dbAPI) { msg('資料庫未連線'); return; }
 
     try {
-      var q = dbAPI.query(dbAPI.collection(dbAPI.db, 'explore_playlists'), dbAPI.orderBy('updatedAt', 'desc'), dbAPI.limit(30));
+      var fetchLimit = currentUser ? 30 : 3;
+      var q = dbAPI.query(dbAPI.collection(dbAPI.db, 'explore_playlists'), dbAPI.orderBy('updatedAt', 'desc'), dbAPI.limit(fetchLimit));
       var snap = await dbAPI.getDocs(q);
       var list = [];
       snap.forEach(function (d) { var x = d.data(); x._id = d.id; list.push(x); });
 
       if (!list.length) { msg('廣場目前還沒有公開歌單，快成為第一個發布的人吧！'); return; }
+
+      var parent = grid.parentNode;
+      if (parent.classList.contains('explore-guest-wrapper')) {
+        var oldOverlay = parent.querySelector('.explore-login-overlay');
+        if (oldOverlay) oldOverlay.remove();
+        parent.classList.remove('blurred');
+      }
 
       grid.innerHTML = '';
 
@@ -522,7 +534,7 @@
           '<div style="display:flex;gap:6px;flex-shrink:0;"></div>';
         row.querySelector('a').setAttribute('href', '#s/' + item._id);
         row.querySelector('.pc-title').textContent = item.name || '未命名歌單';
-        row.querySelector('.pc-meta').textContent = '由 ' + (item.ownerName || '匿名動漫迷') + ' 分享 · ' + (item.songsCount || 0) + ' 首';
+        row.querySelector('.pc-meta').textContent = '由 ' + (item.ownerName || '匿名動漫迷') + ' 分享 · ' + (item.songsCount || 0) + ' 首 · ' + (item.views || 0) + '次瀏覽';
         
         if (/^https?:\/\//i.test(item.coverUrl || '')) {
           row.querySelector('.hist-cover').style.backgroundImage = 'url("' + item.coverUrl.replace(/"/g, '%22') + '")';
@@ -552,6 +564,30 @@
         }
         grid.appendChild(row);
       });
+
+      if (!currentUser) {
+        var wrapper = grid.parentNode;
+        if (!wrapper.classList.contains('explore-guest-wrapper')) {
+          wrapper = document.createElement('div');
+          wrapper.className = 'explore-guest-wrapper';
+          grid.parentNode.insertBefore(wrapper, grid);
+          wrapper.appendChild(grid);
+        }
+
+        wrapper.classList.add('blurred');
+
+        var overlay = document.createElement('div');
+        overlay.className = 'explore-login-overlay';
+        overlay.innerHTML = 
+          '<p>🔒 想要探索更多動漫黑膠歌單嗎？<br>立即登入解鎖完整內容！</p>' +
+          '<button class="btn-block primary" type="button">🔑 立即登入</button>';
+
+        overlay.querySelector('button').addEventListener('click', function () {
+          triggerLogin();
+        });
+
+        wrapper.appendChild(overlay);
+      }
 
     } catch (e) {
       console.error('載入廣場失敗', e);
@@ -1005,11 +1041,20 @@
   function loadShared(id) {
     if (!/^[a-z0-9]{6,12}$/.test(id)) { showError('無效的分享連結'); return; }
     if (!dbAPI) return;
-    dbAPI.getDoc(dbAPI.doc(dbAPI.db, 'shared', id)).then(function (snap) {
+    dbAPI.getDoc(dbAPI.doc(dbAPI.db, 'shared', id)).then(async function (snap) {
       if (location.hash !== '#s/' + id) return;
       if (!snap.exists()) { showError('此歌單已被下架或刪除。'); return; }
       var d = snap.data();
       showPlayView(encodePlaylist(unpackPayload({ n: d.n, s: d.s })), false, id);
+      
+      try {
+        var expRef = dbAPI.doc(dbAPI.db, 'explore_playlists', id);
+        var expSnap = await dbAPI.getDoc(expRef);
+        if (expSnap.exists()) {
+          var newViews = (expSnap.data().views || 0) + 1;
+          await dbAPI.updateDoc(expRef, { views: newViews });
+        }
+      } catch (err) {}
     }).catch(function (e) { showError('無法讀取歌單：' + (e.code || e.message)); });
   }
 
