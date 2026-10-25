@@ -128,15 +128,22 @@
       <p class="guest-desc">
         掃描海報上的 NFC 標籤，或是開啟朋友分享的連結，即可體驗專屬的復古黑膠播放器。
       </p>
-      <button class="btn-block primary" id="guestLoginBtn" style="margin-top: 30px; font-size: 18px; padding: 18px;">
-        登入以編輯你的歌單
-      </button>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 30px;">
+        <button class="btn-block primary" id="guestLoginBtn" style="font-size: 18px; padding: 18px;">
+          登入以編輯你的歌單
+        </button>
+        <button class="btn-block" id="guestExploreBtn" type="button" style="font-size: 16px;">
+          🌐 探索公開廣場歌單
+        </button>
+      </div>
     </div>
 
     <div id="memberHome" hidden>
-      <div class="list-actions">
+      <div class="list-actions" style="display: flex; flex-direction: column; gap: 8px;">
         <button class="btn-block primary" id="createPlaylistBtn" type="button">＋ 建立新歌單</button>
-        <button class="btn-block" id="goToNfcBtn" type="button" style="margin-top: 8px;">🏷️ 將歌單寫入 NFC 標籤</button>
+        <button class="btn-block" id="goToExploreBtn" type="button">🌐 探索歌單廣場</button>
+        <button class="btn-block" id="goToNfcBtn" type="button">🏷️ 將歌單寫入 NFC 標籤</button>
       </div>
       <div class="playlist-grid" id="playlistGrid"></div>
     </div>
@@ -153,6 +160,26 @@
   </div>
 </main>
 
+<!-- ============ 探索廣場視圖 ============ -->
+<main id="viewExplore" hidden>
+  <div class="edit-wrap">
+    <div class="edit-topbar">
+      <div class="edit-header-left">
+        <a href="#home" class="back-link" style="position:static; padding: 0;">← 首頁</a>
+      </div>
+      <div class="edit-header-right">
+        <h1 style="font-size: 20px;">探索廣場</h1>
+      </div>
+    </div>
+
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+      探索其他動漫迷分享的黑膠歌單，點擊可直接播放，或複製到自己的歌單中。
+    </p>
+
+    <div class="playlist-grid" id="exploreGrid"></div>
+  </div>
+</main>
+
 <!-- ============ NFC 寫入獨立視圖 ============ -->
 <main id="viewNfc" hidden>
   <div class="edit-wrap">
@@ -165,7 +192,6 @@
       </div>
     </div>
 
-    <!-- 不支援 NFC 提示區 -->
     <div id="nfcUnsupported" hidden style="text-align: center; margin-top: 40px;">
       <p class="err" style="font-size: 15px; margin-bottom: 24px; color: #ff9e9e; line-height: 1.6;">
         此手機或瀏覽器不支援 NFC 寫入功能。<br>（建議使用 Android 手機之 Chrome 瀏覽器開啟）
@@ -173,7 +199,6 @@
       <a href="#home" class="btn-block primary" style="text-decoration: none; display: block; text-align: center;">返回主頁面</a>
     </div>
 
-    <!-- 支援 NFC 操作介面 -->
     <div id="nfcSupported" hidden style="display: flex; flex-direction: column; gap: 16px; margin-top: 10px;">
       <div class="share-box" style="text-align: center;">
         <p id="nfcStatusText" style="font-size: 15px; color: var(--text-main); font-weight: 600;">
@@ -213,6 +238,11 @@
     <label class="field" style="margin-top: 10px;">
       <span>歌單名稱</span>
       <input id="playlistName" type="text" maxlength="40" placeholder="請輸入歌單名稱">
+    </label>
+
+    <label class="field" style="flex-direction: row; align-items: center; gap: 10px; margin-top: 6px; cursor: pointer;">
+      <input type="checkbox" id="playlistIsPublic" style="width: 18px; height: 18px; accent-color: var(--accent);">
+      <span style="font-size: 14px; color: var(--text-main);">🌐 公開發布至探索廣場</span>
     </label>
 
     <div id="songEditorList" class="song-list"></div>
@@ -293,7 +323,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, deleteUser, signInWithRedirect, reauthenticateWithPopup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { initializeFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { initializeFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyB1r6uz7hRPjZz3Ha5YJVRG28vt0B31MVo",
@@ -312,7 +342,7 @@
     const provider = new GoogleAuthProvider();
 
     window.firebaseAuth = { auth, provider, signInWithPopup, signOut, onAuthStateChanged, deleteUser, signInWithRedirect, reauthenticateWithPopup };
-    window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc, onSnapshot };
+    window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, limit };
     
     window.dispatchEvent(new Event('firebaseReady'));
   } catch (e) {
