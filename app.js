@@ -492,6 +492,7 @@
     show('viewExplore');
     var grid = $('exploreGrid');
     if (!grid) return;
+
     function msg(t, c) {
       grid.innerHTML = '';
       var p = document.createElement('p');
@@ -499,15 +500,30 @@
       p.textContent = t;
       grid.appendChild(p);
     }
+
     msg('載入探索廣場歌單中...');
     if (!dbAPI) { msg('資料庫未連線'); return; }
+
     try {
-      var q = dbAPI.query(dbAPI.collection(dbAPI.db, 'explore_playlists'), dbAPI.orderBy('updatedAt', 'desc'), dbAPI.limit(30));
+      // 未登入時只抓取前 3 筆，已登入抓取前 30 筆
+      var fetchLimit = currentUser ? 30 : 3;
+      var q = dbAPI.query(dbAPI.collection(dbAPI.db, 'explore_playlists'), dbAPI.orderBy('updatedAt', 'desc'), dbAPI.limit(fetchLimit));
       var snap = await dbAPI.getDocs(q);
       var list = [];
       snap.forEach(function (d) { var x = d.data(); x._id = d.id; list.push(x); });
+
       if (!list.length) { msg('廣場目前還沒有公開歌單，快成為第一個發布的人吧！'); return; }
+
+      // 重置包裹容器（如果之前有被包過）
+      var parent = grid.parentNode;
+      if (parent.classList.contains('explore-guest-wrapper')) {
+        var oldOverlay = parent.querySelector('.explore-login-overlay');
+        if (oldOverlay) oldOverlay.remove();
+        parent.classList.remove('blurred');
+      }
+
       grid.innerHTML = '';
+
       list.forEach(function (item) {
         if (!/^[a-z0-9]{6,12}$/.test(item._id)) return;
         var row = document.createElement('div');
@@ -517,9 +533,11 @@
         row.querySelector('a').setAttribute('href', '#s/' + item._id);
         row.querySelector('.pc-title').textContent = item.name || '未命名歌單';
         row.querySelector('.pc-meta').textContent = '由 ' + (item.ownerName || '匿名動漫迷') + ' 分享 · ' + (item.songsCount || 0) + ' 首';
+        
         if (/^https?:\/\//i.test(item.coverUrl || '')) {
           row.querySelector('.hist-cover').style.backgroundImage = 'url("' + item.coverUrl.replace(/"/g, '%22') + '")';
         }
+
         var box = row.lastChild;
         if (currentUser) {
           var add = document.createElement('button');
@@ -527,6 +545,7 @@
           add.title = '複製到我的歌單'; add.setAttribute('aria-label', '複製到我的歌單');
           add.addEventListener('click', function () { copyExplorePlaylistToMine(item); });
           box.appendChild(add);
+
           if (item.ownerUid === currentUser.uid) {
             var del = document.createElement('button');
             del.type = 'button'; del.className = 'icon-btn danger'; del.textContent = '🗑';
@@ -543,6 +562,32 @@
         }
         grid.appendChild(row);
       });
+
+      // 未登入時：外層加上漸層遮罩，並顯示登入提示按鈕
+      if (!currentUser) {
+        var wrapper = grid.parentNode;
+        if (!wrapper.classList.contains('explore-guest-wrapper')) {
+          wrapper = document.createElement('div');
+          wrapper.className = 'explore-guest-wrapper';
+          grid.parentNode.insertBefore(wrapper, grid);
+          wrapper.appendChild(grid);
+        }
+
+        wrapper.classList.add('blurred');
+
+        var overlay = document.createElement('div');
+        overlay.className = 'explore-login-overlay';
+        overlay.innerHTML = 
+          '<p>🔒 想要探索更多動漫黑膠歌單嗎？<br>立即登入解鎖完整內容！</p>' +
+          '<button class="btn-block primary" type="button">🔑 立即登入</button>';
+
+        overlay.querySelector('button').addEventListener('click', function () {
+          triggerLogin();
+        });
+
+        wrapper.appendChild(overlay);
+      }
+
     } catch (e) {
       console.error('載入廣場失敗', e);
       msg('無法載入探索廣場，請稍後再試。', '#ff9e9e');
