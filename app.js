@@ -487,7 +487,7 @@
     });
   }
 
-  /* ============ 探索廣場視圖邏輯 ============ */
+ /* ============ 探索廣場視圖邏輯 ============ */
   async function showExploreView() {
     show('viewExplore');
     var grid = $('exploreGrid');
