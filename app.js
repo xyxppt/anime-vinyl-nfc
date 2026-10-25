@@ -491,7 +491,7 @@
     });
   }
 
-  /* ============ 探索廣場視圖邏輯 (含純文字瀏覽次數) ============ */
+  /* ============ 探索廣場視圖邏輯 (確保顯示純數字觀看次數) ============ */
   async function showExploreView() {
     show('viewExplore');
     var grid = $('exploreGrid');
@@ -534,7 +534,10 @@
           '<div style="display:flex;gap:6px;flex-shrink:0;"></div>';
         row.querySelector('a').setAttribute('href', '#s/' + item._id);
         row.querySelector('.pc-title').textContent = item.name || '未命名歌單';
-        row.querySelector('.pc-meta').textContent = '由 ' + (item.ownerName || '匿名動漫迷') + ' 分享 · ' + (item.songsCount || 0) + ' 首 · ' + (item.views || 0) + '次瀏覽';
+        
+        // 防呆處理：若 views 屬性為 undefined/null，預設顯示 0
+        var viewsNum = (item.views !== undefined && item.views !== null) ? item.views : 0;
+        row.querySelector('.pc-meta').textContent = '由 ' + (item.ownerName || '匿名動漫迷') + ' 分享 · ' + (item.songsCount || 0) + ' 首 · ' + viewsNum + '次瀏覽';
         
         if (/^https?:\/\//i.test(item.coverUrl || '')) {
           row.querySelector('.hist-cover').style.backgroundImage = 'url("' + item.coverUrl.replace(/"/g, '%22') + '")';
@@ -1034,7 +1037,7 @@
   function removeShared(pl) {
     if (pl && pl.shareId && currentUser && dbAPI) {
       dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'shared', pl.shareId)).catch(function (e) { console.error(e); });
-      dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'explore_playlists', pl.shareId)).catch(function (e) { console.error(e); });
+      dbAPI.deleteDoc(dbAPI.doc(dbAPI.doc(dbAPI.db, 'explore_playlists', pl.shareId))).catch(function (e) { console.error(e); });
     }
   }
 
@@ -1047,14 +1050,17 @@
       var d = snap.data();
       showPlayView(encodePlaylist(unpackPayload({ n: d.n, s: d.s })), false, id);
       
+      // 自動計算並更新觀看次數
       try {
         var expRef = dbAPI.doc(dbAPI.db, 'explore_playlists', id);
         var expSnap = await dbAPI.getDoc(expRef);
         if (expSnap.exists()) {
-          var newViews = (expSnap.data().views || 0) + 1;
-          await dbAPI.updateDoc(expRef, { views: newViews });
+          var currentViews = expSnap.data().views || 0;
+          await dbAPI.setDoc(expRef, { views: currentViews + 1 }, { merge: true });
         }
-      } catch (err) {}
+      } catch (err) {
+        console.warn('觀看次數更新跳過:', err);
+      }
     }).catch(function (e) { showError('無法讀取歌單：' + (e.code || e.message)); });
   }
 
