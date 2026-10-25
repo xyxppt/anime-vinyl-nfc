@@ -73,6 +73,7 @@
     return {
       id: generateId(),
       name: name || '新歌單',
+      isPublic: false,
       songs: [{ anime: '', title: '', artist: '', videoId: '', cover: '' }],
       updatedAt: new Date().toISOString()
     };
@@ -112,12 +113,37 @@
       }, { merge: true });
       
       var cp = getCurrentPlaylist();
-      if (cp && cp.shareId) publishShared(cp).catch(function (e) { console.error(e); });
+      if (cp) {
+        if (cp.shareId) publishShared(cp).catch(function (e) { console.error(e); });
+        if (cp.isPublic) publishExplorePlaylist(cp).catch(function (e) { console.error(e); });
+      }
       if (!silent) toast('☁️ 已儲存至雲端');
     } catch (e) {
       console.error('雲端儲存失敗', e);
       toast('⚠️ 雲端同步失敗：' + (e.code || e.message), 5000);
     }
+  }
+
+  async function publishExplorePlaylist(pl) {
+    if (!currentUser || !dbAPI || !pl) return;
+    var validSongs = (pl.songs || []).filter(s => parseVideoId(s.videoId));
+    if (!validSongs.length) return;
+
+    if (!pl.shareId) {
+      pl.shareId = (Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 8);
+    }
+
+    var exploreRef = dbAPI.doc(dbAPI.db, 'explore_playlists', pl.shareId);
+    await dbAPI.setDoc(exploreRef, {
+      id: pl.shareId,
+      name: pl.name || '未命名歌單',
+      ownerName: currentUser.displayName || '動漫迷',
+      ownerUid: currentUser.uid,
+      songsCount: validSongs.length,
+      coverUrl: thumbOf(validSongs[0]),
+      songs: validSongs,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
   }
 
   function isBlankPlaylist(pl) {
@@ -155,9 +181,15 @@
       renderHistory();
     } else if (hash.indexOf('#edit/') === 0 && !wasDirty) {
       var pl = getCurrentPlaylist();
-      if (pl) { $('playlistName').value = pl.name; renderEditor(); }
+      if (pl) { 
+        $('playlistName').value = pl.name; 
+        if ($('playlistIsPublic')) $('playlistIsPublic').checked = !!pl.isPublic;
+        renderEditor(); 
+      }
     } else if (hash === '#nfc') {
       showNfcView();
+    } else if (hash === '#explore') {
+      showExploreView();
     }
   }
 
@@ -271,6 +303,11 @@
       isDirty = false;
     }
 
+    if (hash === '#explore') {
+      showExploreView();
+      return;
+    }
+
     if (hash === '#nfc') {
       showNfcView();
       return;
@@ -323,7 +360,7 @@
   }
 
   function show(id) {
-    ['viewEdit', 'viewPlay', 'viewError', 'viewHome', 'viewNfc'].forEach(function (v) {
+    ['viewEdit', 'viewPlay', 'viewError', 'viewHome', 'viewNfc', 'viewExplore'].forEach(function (v) {
       var el = $(v);
       if (el) el.hidden = (v !== id);
     });
@@ -373,11 +410,94 @@
       a.innerHTML = 
         '<div class="pc-info">' +
           '<span class="pc-title">' + esc(pl.name || '未命名歌單') + '</span>' +
-          '<span class="pc-meta">' + count + ' 首歌曲</span>' +
+          '<span class="pc-meta">' + count + ' 首歌曲' + (pl.isPublic ? ' · 🌐 公開' : '') + '</span>' +
         '</div>' +
         '<div class="pc-arrow">❯</div>';
       grid.appendChild(a);
     });
+  }
+
+  /* ============ 探索廣場視圖邏輯 ============ */
+  async function showExploreView() {
+    show('viewExplore');
+    var grid = $('exploreGrid');
+    if (!grid) return;
+    grid.innerHTML = '<p style="text-align:center; color: var(--text-muted); font-size:14px; margin-top:20px;">載入探索廣場歌單中...</p>';
+
+    if (!dbAPI) {
+      grid.innerHTML = '<p style="text-align:center; color: var(--text-muted); font-size:14px; margin-top:20px;">資料庫未連線</p>';
+      return;
+    }
+
+    try {
+      var q = dbAPI.query(
+        dbAPI.collection(dbAPI.db, 'explore_playlists'),
+        dbAPI.limit(30)
+      );
+      
+      var snap = await dbAPI.getDocs(q);
+      var list = [];
+      snap.forEach(doc => list.push(doc.data()));
+
+      if (!list.length) {
+        grid.innerHTML = '<p style="text-align:center; color: var(--text-muted); font-size:14px; margin-top:20px;">廣場目前還沒有公開歌單，快成為第一個發布的人吧！</p>';
+        return;
+      }
+
+      grid.innerHTML = '';
+      list.forEach(function (item) {
+        var card = document.createElement('div');
+        card.className = 'playlist-card';
+        card.innerHTML =
+          '<a class="pc-left" href="#s/' + esc(item.id) + '">' +
+            '<span class="hist-cover" style="background-image: url(\'' + esc(item.coverUrl || '') + '\')"></span>' +
+            '<span class="pc-info">' +
+              '<span class="pc-title">' + esc(item.name || '未命名歌單') + '</span>' +
+              '<span class="pc-meta">由 ' + esc(item.ownerName || '創作者') + ' 分享 · ' + (item.songsCount || 0) + ' 首</span>' +
+            '</span>' +
+          '</a>' +
+          (currentUser ? '<button type="button" class="icon-btn" title="複製到我的歌單">＋</button>' : '');
+
+        var addBtn = card.querySelector('button');
+        if (addBtn) {
+          addBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            copyExplorePlaylistToMine(item);
+          });
+        }
+        grid.appendChild(card);
+      });
+    } catch (e) {
+      console.error('載入廣場失敗', e);
+      grid.innerHTML = '<p style="text-align:center; color: #ff9e9e; font-size:14px; margin-top:20px;">無法載入探索廣場，請稍後再試。</p>';
+    }
+  }
+
+  function copyExplorePlaylistToMine(item) {
+    if (!currentUser) {
+      toast('請先登入才能複製歌單');
+      return;
+    }
+    var newPl = createEmptyPlaylist(item.name ? item.name + ' (來自廣場)' : '複製的歌單');
+    newPl.songs = (item.songs || []).map(function (x) {
+      return {
+        anime: x.anime || '',
+        title: x.title || '',
+        artist: x.artist || '',
+        videoId: x.videoId || '',
+        cover: x.cover || ''
+      };
+    });
+    state.playlists.push(newPl);
+    saveDraft();
+    saveDraftToCloud(true);
+    toast('🎉 已成功複製到你的歌單');
+    location.hash = '#edit/' + newPl.id;
+  }
+
+  function bindExploreControls() {
+    if ($('goToExploreBtn')) $('goToExploreBtn').addEventListener('click', function () { location.hash = '#explore'; });
+    if ($('guestExploreBtn')) $('guestExploreBtn').addEventListener('click', function () { location.hash = '#explore'; });
   }
 
   /* ============ NFC 專屬視圖邏輯 ============ */
@@ -525,6 +645,7 @@
     isDirty = false;
     
     if ($('playlistName')) $('playlistName').value = pl.name;
+    if ($('playlistIsPublic')) $('playlistIsPublic').checked = !!pl.isPublic;
     if ($('saveStatus')) $('saveStatus').textContent = '';
     renderEditor();
     show('viewEdit');
@@ -752,6 +873,7 @@
   function removeShared(pl) {
     if (pl && pl.shareId && currentUser && dbAPI) {
       dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'shared', pl.shareId)).catch(function (e) { console.error(e); });
+      dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'explore_playlists', pl.shareId)).catch(function (e) { console.error(e); });
     }
   }
 
@@ -1458,6 +1580,14 @@
       }
     });
 
+    if ($('playlistIsPublic')) $('playlistIsPublic').addEventListener('change', function (e) {
+      var pl = getCurrentPlaylist();
+      if (pl) {
+        pl.isPublic = e.target.checked;
+        markDirty();
+      }
+    });
+
     if ($('saveBtn')) $('saveBtn').addEventListener('click', function () {
       if (!currentUser) {
         toast('請先登入才能儲存至雲端');
@@ -1824,6 +1954,7 @@
     bindAuthControls();
     bindDeleteControls();
     bindNfcControls();
+    bindExploreControls();
     bindSeek();
     buildEq();
     bindZoomLock();
