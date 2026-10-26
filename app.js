@@ -1049,8 +1049,8 @@
 
   function removeShared(pl) {
     if (pl && pl.shareId && currentUser && dbAPI) {
-      dbAPI.deleteDoc(dbAPI.doc(dbAPI.doc(dbAPI.db, 'shared', pl.shareId))).catch(function (e) { console.error(e); });
-      dbAPI.deleteDoc(dbAPI.doc(dbAPI.doc(dbAPI.db, 'explore_playlists', pl.shareId))).catch(function (e) { console.error(e); });
+      dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'shared', pl.shareId)).catch(function (e) { console.error(e); });
+      dbAPI.deleteDoc(dbAPI.doc(dbAPI.db, 'explore_playlists', pl.shareId)).catch(function (e) { console.error(e); });
     }
   }
 
@@ -1711,6 +1711,14 @@
     try { localStorage.setItem('anime-vinyl:theme', JSON.stringify(theme)); } catch (e) {}
   }
 
+  // 套用氛圍特效的函式
+  function applyAtmosphere(atm) {
+    document.body.className = document.body.className.replace(/\batm-\S+/g, '').trim();
+    if (atm && atm !== 'default') {
+      document.body.classList.add('atm-' + atm);
+    }
+  }
+
   function bindExtras() {
     try {
       var m = localStorage.getItem('anime-vinyl:mode');
@@ -1719,6 +1727,10 @@
       if (t && /^#[0-9a-f]{6}$/i.test(t.accent)) theme.accent = t.accent;
     } catch (e) {}
     applyTheme();
+
+    // 載入儲存的氛圍特效
+    var savedAtm = localStorage.getItem('anime-vinyl:atmosphere') || 'default';
+    applyAtmosphere(savedAtm);
 
     var modeBtn = $('modeBtn');
     function showMode() {
@@ -1745,6 +1757,29 @@
       });
     }
     document.addEventListener('visibilitychange', function () { if (!document.hidden) tickSleep(); });
+
+    // 氛圍特效切換按鈕
+    var atmSeg = $('atmosphereSeg');
+    if (atmSeg) {
+      var btns = atmSeg.querySelectorAll('button');
+      
+      function updateAtmUI() {
+        var current = localStorage.getItem('anime-vinyl:atmosphere') || 'default';
+        btns.forEach(function (b) {
+          b.classList.toggle('active', b.dataset.atm === current);
+        });
+      }
+      updateAtmUI();
+
+      btns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var atm = btn.dataset.atm;
+          applyAtmosphere(atm);
+          localStorage.setItem('anime-vinyl:atmosphere', atm);
+          updateAtmUI();
+        });
+      });
+    }
 
     var accentBox = $('accentSwatches');
     var accentPick = $('accentPicker');
