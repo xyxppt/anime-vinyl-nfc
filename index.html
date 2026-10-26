@@ -82,8 +82,8 @@
     <div class="extras">
       <button class="pill" id="modeBtn" type="button" aria-label="播放模式">➡️ 順序</button>
       <button class="pill" id="sleepBtn" type="button" aria-label="睡眠定時">😴 定時</button>
-      <button class="pill" id="sideBtn" type="button" aria-label="唱片面">盤面: A</button>
-      <button class="pill" id="themeBtnPlay" type="button" aria-label="氛圍主題">🌌 氣氛主題</button>
+      <button class="pill" id="themeBtn" type="button" aria-label="外觀主題">🎨 外觀</button>
+      <button class="pill" id="themeBtnPlay" type="button" aria-label="自訂唱片風格">💽 唱片風格</button>
     </div>
   </div>
   <div class="drawer-overlay" id="playlistDrawer" hidden>
@@ -97,7 +97,7 @@
   </div>
 </main>
 
-<!-- ============ 首頁 ============ -->
+<!-- ============ 首頁 (包含歡迎畫面與會員總覽) ============ -->
 <main id="viewHome" hidden>
   <div class="edit-wrap">
     <div class="edit-topbar">
@@ -105,7 +105,6 @@
         <h1>Anime Vinyl</h1>
       </div>
       <div class="user-area" id="homeUserArea" hidden>
-        <button class="pill" id="themeBtn" type="button" aria-label="主題顏色" style="margin-right: 8px;">🎨 主題顏色</button>
         <div id="userProfile" class="user-profile" hidden>
           <img id="userAvatar" src="" alt="User">
           <div id="userDropdown" class="user-dropdown" hidden>
@@ -173,26 +172,52 @@
         <h1 style="font-size: 20px;">探索廣場</h1>
       </div>
     </div>
+
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+      探索其他動漫迷分享的黑膠歌單，點擊可直接播放，或複製到自己的歌單中。
+    </p>
+
     <div class="playlist-grid" id="exploreGrid"></div>
   </div>
 </main>
 
-<!-- ============ NFC 寫入視圖 ============ -->
+<!-- ============ NFC 寫入獨立視圖 ============ -->
 <main id="viewNfc" hidden>
   <div class="edit-wrap">
     <div class="edit-topbar">
       <div class="edit-header-left">
         <a href="#home" class="back-link" style="position:static; padding: 0;">← 首頁</a>
       </div>
-      <div class="edit-header-right"><h1 style="font-size: 20px;">NFC 寫入工具</h1></div>
+      <div class="edit-header-right">
+        <h1 style="font-size: 20px;">NFC 寫入工具</h1>
+      </div>
     </div>
+
     <div id="nfcUnsupported" hidden style="text-align: center; margin-top: 40px;">
-      <p class="err" style="color: #ff9e9e;">此瀏覽器不支援 NFC 寫入。</p>
+      <p class="err" style="font-size: 15px; margin-bottom: 24px; color: #ff9e9e; line-height: 1.6;">
+        此手機或瀏覽器不支援 NFC 寫入功能。<br>（建議使用 Android 手機之 Chrome 瀏覽器開啟）
+      </p>
+      <a href="#home" class="btn-block primary" style="text-decoration: none; display: block; text-align: center;">返回主頁面</a>
     </div>
+
     <div id="nfcSupported" hidden style="display: flex; flex-direction: column; gap: 16px; margin-top: 10px;">
-      <p id="nfcStatusText" style="font-weight: 600;">請選擇要寫入的歌單</p>
-      <select id="nfcPlaylistSelect" style="background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 14px 16px; color: var(--text-main);"></select>
-      <button class="btn-block primary" id="executeNfcWriteBtn" type="button">開始寫入標籤</button>
+      <div class="share-box" style="text-align: center;">
+        <p id="nfcStatusText" style="font-size: 15px; color: var(--text-main); font-weight: 600;">
+          請選擇要寫入的歌單，並準備好 NFC 標籤
+        </p>
+        <p class="share-info" style="margin-top: 6px;">
+          點擊開始後，請將 NFC 標籤貼緊手機背面感應處，寫入完成前請勿移動。
+        </p>
+      </div>
+
+      <label class="field">
+        <span>選擇目標歌單</span>
+        <select id="nfcPlaylistSelect" style="background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 14px 16px; color: var(--text-main); font-size: 16px; font-family: inherit; outline: none;"></select>
+      </label>
+
+      <button class="btn-block primary" id="executeNfcWriteBtn" type="button" style="margin-top: 10px; font-size: 18px; padding: 16px;">
+        開始寫入標籤
+      </button>
     </div>
   </div>
 </main>
@@ -207,7 +232,7 @@
       <div class="edit-header-right">
         <span id="saveStatus" class="save-status"></span>
         <button class="btn-save" id="saveBtn">儲存</button>
-        <button class="icon-btn danger" id="deleteEditBtn" type="button" title="刪除歌單">🗑️</button>
+        <button class="icon-btn danger" id="deleteEditBtn" type="button" title="刪除歌單" aria-label="刪除歌單" style="margin-left: 8px;">🗑️</button>
       </div>
     </div>
 
@@ -222,12 +247,14 @@
     </label>
     <div id="publicNickWrap" hidden>
       <label class="field">
-        <span>公開暱稱</span>
+        <span>公開暱稱（所有人都看得到，留空則顯示「匿名動漫迷」）</span>
         <input id="playlistNick" type="text" maxlength="20" placeholder="匿名動漫迷">
       </label>
+      <p class="share-info" style="margin-top:6px;">公開後，歌單名稱、歌曲與暱稱會出現在探索廣場，取消勾選即可下架。請勿發布侵權或不當內容，任何人都可以檢舉。</p>
     </div>
 
     <div id="songEditorList" class="song-list"></div>
+
     <button class="btn-block ghost" id="addSongBtn" type="button">＋ 新增歌曲</button>
 
     <div class="actions" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
@@ -237,10 +264,11 @@
 
     <div class="share-box" id="shareBox" hidden>
       <label class="field">
-        <span>分享連結</span>
+        <span>分享連結（只讀播放）</span>
         <textarea id="shareUrl" readonly rows="3"></textarea>
       </label>
       <button class="btn-block" id="copyBtn" type="button">複製連結</button>
+      <p class="share-info" id="shareInfo"></p>
     </div>
   </div>
 </main>
@@ -253,11 +281,11 @@
   </div>
 </main>
 
-<!-- ============ 刪除確認 Modal ============ -->
+<!-- ============ 自訂確認彈窗 (Modal) ============ -->
 <div class="modal-overlay" id="deleteModal" hidden>
   <div class="modal-content">
     <h3>刪除歌單</h3>
-    <p>確定要刪除嗎？</p>
+    <p>執行後此歌單將整個刪除無法復原，<br>確定要刪除嗎？</p>
     <div class="modal-actions">
       <button class="btn-block ghost" id="cancelDeleteBtn">取消</button>
       <button class="btn-block danger" id="confirmDeleteBtn">確定刪除</button>
@@ -265,13 +293,13 @@
   </div>
 </div>
 
-<!-- ============ 首頁：主題顏色設定 Modal ============ -->
+<!-- ============ 外觀主題 ============ -->
 <div class="modal-overlay" id="themeModal" hidden>
   <div class="modal-content theme-panel">
-    <h3>🎨 主題顏色</h3>
-    <p class="theme-label">選擇全站按鈕與重點顏色</p>
+    <h3>🎨 外觀</h3>
+    <p class="theme-label">主題色</p>
     <div class="swatches" id="accentSwatches"></div>
-    <div class="picker-row"><span>自訂</span><input type="color" id="accentPicker"></div>
+    <div class="picker-row"><span>自訂</span><input type="color" id="accentPicker" aria-label="自訂主題色"></div>
     <div class="modal-actions" style="margin-top:20px">
       <button class="btn-block ghost" id="themeReset" type="button">重設</button>
       <button class="btn-block primary" id="themeDone" type="button">完成</button>
@@ -279,24 +307,35 @@
   </div>
 </div>
 
-<!-- ============ 播放頁面：氣氛主題切換 Modal ============ -->
-<div class="modal-overlay" id="vibeModal" hidden>
+<!-- ============ 自訂唱片風格面板 ============ -->
+<div class="modal-overlay" id="vinylStyleModal" hidden>
   <div class="modal-content theme-panel">
-    <h3>🌌 氣氛主題切換</h3>
-    <p class="theme-label">為這張黑膠挑選一個播放時的背景氛圍</p>
-    <div class="seg" id="vibeSeg" style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-      <button type="button" class="btn-block" data-vibe="default">✨ 預設深色</button>
-      <button type="button" class="btn-block" data-vibe="rain">🌧️ 雨夜呢喃</button>
-      <button type="button" class="btn-block" data-vibe="sakura">🌸 櫻花浪漫</button>
-      <button type="button" class="btn-block" data-vibe="cyber">⚡ 賽博龐克</button>
-      <button type="button" class="btn-block" data-vibe="crt">📺 復古 CRT 顯像管</button>
+    <h3>💽 自訂唱片風格</h3>
+    <p class="theme-label">唱片外環顏色</p>
+    <div class="picker-row"><span>顏色</span><input type="color" id="vinylColorPicker" value="#16161a" aria-label="唱片外環顏色"></div>
+    
+    <p class="theme-label">唱片中心顏色（留空則顯示曲目封面）</p>
+    <div class="picker-row">
+      <span>中心</span><input type="color" id="centerColorPicker" value="#000000" aria-label="唱片中心顏色">
+      <button class="btn-block ghost" id="resetCenterColorBtn" type="button" style="padding: 6px 10px; font-size: 12px; width: auto;">恢復封面</button>
     </div>
+
+    <p class="theme-label">播放器背景顏色</p>
+    <div class="picker-row"><span>背景</span><input type="color" id="bgColorPicker" value="#0a0a0c" aria-label="背景顏色"></div>
+
+    <p class="theme-label">或上傳自訂背景圖片</p>
+    <div class="picker-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+      <input type="file" id="bgImageInput" accept="image/*" style="font-size: 13px; color: var(--text-muted);">
+      <button class="btn-block ghost" id="resetBgBtn" type="button" style="padding: 8px; font-size: 13px;">重設為預設背景</button>
+    </div>
+
     <div class="modal-actions" style="margin-top:20px">
-      <button class="btn-block primary" id="vibeDone" type="button">完成</button>
+      <button class="btn-block primary" id="vinylStyleDone" type="button">完成</button>
     </div>
   </div>
 </div>
 
+<!-- ============ 吃掉動畫容器 ============ -->
 <div class="eat-animation-overlay" id="eatOverlay" hidden>
   <div class="monster" id="monster">
     <div class="monster-eye left"></div>
@@ -333,6 +372,7 @@
 
     window.firebaseAuth = { auth, provider, signInWithPopup, signOut, onAuthStateChanged, deleteUser, signInWithRedirect, reauthenticateWithPopup };
     window.firebaseDB = { db, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, limit, orderBy };
+    
     window.dispatchEvent(new Event('firebaseReady'));
   } catch (e) {
     console.error("Firebase 初始化失敗", e);
