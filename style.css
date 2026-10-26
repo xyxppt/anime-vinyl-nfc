@@ -77,4 +77,511 @@ body.playing .tonearm { transform: rotate(-31deg); }
 .tap-prompt span { padding: 16px 32px; border-radius: 999px; font-size: 16px; letter-spacing: .1em; color: var(--bg-dark); background: var(--accent); box-shadow: 0 0 30px var(--accent-dim); animation: breathe 2s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.05); opacity: 1; } }
 
-.toast { position: fixed; left: 50%; bottom: calc(24px + env
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: 88vw; padding: 12px 20px; border-radius: 12px; font-size: 14px; line-height: 1.5; text-align: center; color: var(--text-main); background: rgba(18,20,26,.95); border: 1px solid var(--accent-dim); box-shadow: 0 10px 30px rgba(0,0,0,.8); z-index: 80; }
+
+/* 抽屜 */
+.drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 50; display: flex; flex-direction: column; justify-content: flex-end; backdrop-filter: blur(4px); }
+.drawer { background: #0f1117; border-top-left-radius: 24px; border-top-right-radius: 24px; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); max-height: 75vh; display: flex; flex-direction: column; border-top: 1px solid rgba(255,255,255,.05); animation: slideUp .3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.drawer-head h2 { font-size: 18px; color: #fff; }
+.drawer-close { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.05); border: none; color: var(--text-main); font-size: 16px; cursor: pointer; }
+.drawer-list { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
+.drawer-item { display: flex; align-items: center; gap: 14px; padding: 12px; border-radius: 12px; border: none; background: transparent; color: var(--text-main); cursor: pointer; text-align: left; font-family: inherit; width: 100%; transition: background 0.2s; }
+.drawer-item:active { background: rgba(255,255,255,.05); }
+.drawer-item.active { background: rgba(var(--accent-rgb), 0.08); border: 1px solid rgba(var(--accent-rgb), 0.2); }
+.di-cover { width: 48px; height: 48px; border-radius: 8px; background-color: rgba(255,255,255,.05); background-size: cover; background-position: center; flex-shrink: 0; }
+.di-info { display: flex; flex-direction: column; gap: 4px; overflow: hidden; min-width: 0; }
+.di-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.di-artist { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ===== 首頁與編輯視圖通用 ===== */
+#viewHome, #viewEdit { flex-direction: column; align-items: center; justify-content: flex-start; }
+.edit-wrap { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; transition: transform 0.6s cubic-bezier(0.5, 0, 0.5, 1), opacity 0.6s; }
+
+.edit-topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; position: relative; }
+.edit-header-left h1 { font-size: 24px; letter-spacing: .04em; color: #fff; }
+
+/* 帳號頭像 */
+.user-area { position: relative; }
+.btn-google { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .2s; }
+.btn-google:active { background: rgba(255,255,255,.1); }
+.user-profile { position: relative; cursor: pointer; }
+.user-profile img { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--accent); object-fit: cover; display: block; }
+.user-dropdown { position: absolute; top: 45px; right: 0; width: 220px; background: var(--panel); border: 1px solid rgba(255,255,255,.1); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.8); display: flex; flex-direction: column; overflow: hidden; z-index: 100; animation: fadeInDown .2s ease-out; }
+@keyframes fadeInDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+.dropdown-header { padding: 16px; background: rgba(255,255,255,.02); border-bottom: 1px solid rgba(255,255,255,.05); display: flex; flex-direction: column; gap: 4px; }
+.dropdown-header span { font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dropdown-header .text-muted { font-size: 11px; font-weight: 400; }
+.dropdown-item { padding: 14px 16px; background: transparent; border: none; color: var(--text-main); font-size: 14px; text-align: left; cursor: pointer; font-family: inherit; transition: background .15s; }
+.dropdown-item:hover, .dropdown-item:active { background: rgba(255,255,255,.05); }
+.dropdown-item.danger { color: var(--danger); }
+
+/* 歡迎畫面 (未登入) */
+.guest-hero {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 180px;
+  margin-top: 40px;
+  position: relative;
+}
+.glowing-vinyl {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: #000;
+  box-shadow: 0 0 40px var(--accent-dim), inset 0 0 20px rgba(255,255,255,0.1);
+  animation: spin 4s linear infinite;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.vinyl-inner {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 20px var(--accent);
+}
+.guest-title {
+  text-align: center;
+  color: #fff;
+  font-size: 24px;
+  margin-top: 20px;
+}
+.guest-desc {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin-top: 12px;
+  padding: 0 20px;
+}
+
+/* 總覽頁面卡片 */
+.list-actions { margin-top: 10px; margin-bottom: 8px; }
+.playlist-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.playlist-card { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s; text-decoration: none; color: var(--text-main); }
+.playlist-card:active { background: rgba(255,255,255,.06); }
+.pc-info { display: flex; flex-direction: column; gap: 6px; }
+.pc-title { font-size: 16px; font-weight: 700; color: #fff; }
+.pc-meta { font-size: 12px; color: var(--text-muted); }
+.pc-arrow { color: var(--text-muted); font-size: 20px; }
+
+/* 編輯頁面儲存按鈕 */
+.edit-header-right { display: flex; align-items: center; gap: 12px; }
+.save-status { font-size: 12px; color: var(--text-muted); }
+.btn-save { background: var(--accent); color: var(--bg-dark); border: none; padding: 8px 20px; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
+.btn-save:active { opacity: 0.8; }
+
+/* 表單與歌曲卡 */
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field > span { font-size: 13px; color: var(--text-muted); }
+.field input, .field textarea { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 14px 16px; color: var(--text-main); font-size: 16px; font-family: inherit; outline: none; transition: border-color .15s; }
+.field input:focus, .field textarea:focus { border-color: var(--accent); }
+.field textarea { resize: vertical; min-height: 70px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.5; }
+
+.song-list { display: flex; flex-direction: column; gap: 14px; }
+.song-card { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.05); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.song-card-head { display: flex; justify-content: space-between; align-items: center; }
+.song-num { font-size: 13px; font-weight: 700; color: var(--accent); padding: 4px 12px; background: var(--accent-dim); border-radius: 999px; }
+.song-card-tools { display: flex; gap: 8px; }
+.icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); color: var(--text-main); font-size: 14px; cursor: pointer; display: grid; place-items: center; font-family: inherit; transition: background .15s; }
+.icon-btn:active { background: rgba(255,255,255,.1); }
+.icon-btn:disabled { opacity: .3; cursor: default; }
+.icon-btn.danger { color: #ff6b6b; border-color: rgba(255,107,107,.2); }
+.song-body { display: flex; flex-direction: column; gap: 14px; }
+.cover-preview { width: 100%; height: 120px; border-radius: 10px; background-color: rgba(0,0,0,.3); background-size: contain; background-position: center; background-repeat: no-repeat; display: grid; place-items: center; font-size: 12px; color: var(--text-muted); border: 1px dashed rgba(255,255,255,.1); }
+.song-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0; }
+.field-sm { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field-sm.full { grid-column: 1 / -1; }
+.field-sm > span { font-size: 11px; color: var(--text-muted); }
+.field-sm input { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 12px 10px; color: var(--text-main); font-size: 16px; font-family: inherit; outline: none; min-width: 0; }
+.field-sm input:focus { border-color: var(--accent); }
+
+.btn-block { width: 100%; padding: 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); color: var(--text-main); font-size: 16px; font-weight: 600; letter-spacing: .04em; cursor: pointer; font-family: inherit; transition: all .15s; }
+.btn-block:active { transform: scale(.98); }
+.btn-block.primary { background: var(--accent); color: var(--bg-dark); border-color: var(--accent); box-shadow: 0 0 15px var(--accent-dim); }
+.btn-block.ghost { background: transparent; border-style: dashed; color: var(--text-muted); }
+.btn-block.danger { background: var(--danger); color: #fff; border-color: var(--danger); box-shadow: 0 0 15px var(--danger-dim); }
+.actions { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.share-box { background: rgba(var(--accent-rgb), 0.03); border: 1px solid var(--accent-dim); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.share-info { font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+
+#viewError { flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
+.error-wrap { text-align: center; max-width: 380px; }
+.err { font-size: 16px; line-height: 1.8; color: #ff9e9e; margin-bottom: 24px; white-space: pre-wrap; }
+.back { font-size: 15px; color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); padding-bottom: 2px; }
+#ytHost { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
+
+/* ===== 自訂彈窗 (Modal) ===== */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px);
+  z-index: 200; display: flex; justify-content: center; align-items: center;
+  opacity: 0; transition: opacity 0.3s;
+}
+.modal-overlay.show { opacity: 1; }
+.modal-content {
+  background: var(--panel); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px; padding: 24px; width: 90%; max-width: 320px;
+  transform: translateY(20px); transition: transform 0.3s;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.9);
+}
+.modal-overlay.show .modal-content { transform: translateY(0); }
+.modal-content h3 { color: #fff; font-size: 18px; margin-bottom: 12px; text-align: center; }
+.modal-content p { color: var(--text-muted); font-size: 14px; line-height: 1.6; text-align: center; margin-bottom: 24px; }
+.modal-actions { display: flex; gap: 12px; }
+.modal-actions .btn-block { padding: 12px; font-size: 15px; }
+
+/* ===== 吃掉動畫容器 ===== */
+.eat-animation-overlay {
+  position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.9);
+  display: flex; justify-content: center; align-items: center;
+  opacity: 0; transition: opacity 0.3s;
+}
+.eat-animation-overlay.show { opacity: 1; }
+
+/* 怪獸本體 */
+.monster {
+  width: 120px; height: 120px; background: var(--accent); border-radius: 50%;
+  position: relative; display: flex; justify-content: center; align-items: center;
+  box-shadow: 0 0 50px var(--accent), inset 0 -10px 20px rgba(0,0,0,0.3);
+  transform: scale(0); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.eat-animation-overlay.show .monster { transform: scale(1); }
+
+/* 眼睛 */
+.monster-eye {
+  width: 16px; height: 16px; background: #000; border-radius: 50%;
+  position: absolute; top: 35px;
+}
+.monster-eye.left { left: 28px; }
+.monster-eye.right { right: 28px; }
+
+/* 嘴巴 (預設閉合) */
+.monster-mouth {
+  width: 40px; height: 10px; background: #000; border-radius: 10px;
+  position: absolute; bottom: 35px;
+  transition: all 0.2s;
+}
+
+/* 張嘴狀態 */
+.monster.open-mouth .monster-mouth {
+  height: 40px; width: 60px; border-radius: 0 0 30px 30px; bottom: 20px;
+}
+
+/* 被吃的元素動畫 */
+.being-eaten {
+  transform: scale(0.1) translateY(-100px) rotate(20deg) !important;
+  opacity: 0;
+  transition: all 0.6s cubic-bezier(0.5, 0, 0.5, 1) !important;
+}
+
+/* ===== 修正與無障礙 ===== */
+.vinyl-swing { position: absolute; inset: 0; will-change: transform; }
+button.nav-arrow { background: none; border: none; font-family: inherit; line-height: 1; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* ===== 播放紀錄 ===== */
+.section-title { font-size: 14px; color: var(--text-muted); font-weight: 600; letter-spacing: .08em; margin: 24px 0 12px; }
+.playlist-card .pc-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-decoration: none; color: inherit; cursor: pointer; }
+.playlist-card .pc-info { min-width: 0; }
+.playlist-card .pc-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-cover { width: 44px; height: 44px; border-radius: 8px; flex-shrink: 0; background: rgba(255,255,255,.05) center / cover no-repeat; }
+
+/* ===== 播放頁鎖定 ===== */
+body.play-mode { 
+  position: fixed; 
+  inset: 0; 
+  overflow: hidden; 
+  overscroll-behavior: none; 
+}
+body.play-mode .play-wrap,
+body.play-mode .btn,
+body.play-mode .nav-arrow,
+body.play-mode .seek,
+body.play-mode .drawer-toggle,
+body.play-mode .pill {
+  touch-action: manipulation;
+}
+body.play-mode .plinth-wrapper {
+  touch-action: pan-x;
+}
+body.play-mode .play-wrap { gap: clamp(8px, 2dvh, 20px); }
+body.play-mode .plinth-wrapper { width: min(85vw, 340px, 36dvh); margin-top: 0; }
+.drawer-list { touch-action: pan-y; }
+
+/* ===== 可拖曳進度條 ===== */
+.seek { position: relative; padding: 10px 0; margin: -10px 0; cursor: pointer; touch-action: none; }
+.thumb { position: absolute; top: 6px; left: -6px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px var(--accent); pointer-events: none; transition: transform .15s; }
+.seek.dragging .thumb { transform: scale(1.4); }
+.seek.dragging .bar { height: 6px; margin: -1px 0; }
+
+/* ===== 音量起伏動畫(裝飾) ===== */
+.eq { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 34px; width: 100%; max-width: 330px; }
+.eq i { flex: 1; max-width: 6px; height: 100%; background: var(--accent); border-radius: 2px; opacity: .85; transform-origin: bottom; transform: scaleY(.12); animation: eqbar var(--d, 1s) ease-in-out infinite alternate; animation-delay: var(--dl, 0s); animation-play-state: paused; box-shadow: 0 0 6px var(--accent-dim); }
+body.playing .eq i { animation-play-state: running; }
+@keyframes eqbar { from { transform: scaleY(.12); } to { transform: scaleY(var(--h, 1)); } }
+
+/* ===== 互動特效 ===== */
+.btn, .btn-block, .icon-btn, .btn-save, .btn-google, .drawer-toggle, .drawer-close, .drawer-item, .playlist-card, .dropdown-item { position: relative; overflow: hidden; }
+.nav-arrow { overflow: hidden; }
+.ripple { position: absolute; border-radius: 50%; pointer-events: none; background: rgba(255,255,255,.35); transform: scale(0); animation: ripple .6s ease-out forwards; }
+.btn.primary .ripple, .btn-block.primary .ripple, .btn-save .ripple { background: rgba(0,0,0,.22); }
+@keyframes ripple { to { transform: scale(1); opacity: 0; } }
+
+body.playing .btn.primary { animation: glowpulse 1.8s ease-in-out infinite; }
+@keyframes glowpulse { 0%, 100% { box-shadow: 0 0 20px var(--accent-dim), inset 0 1px 2px rgba(255,255,255,.5); } 50% { box-shadow: 0 0 38px 8px rgba(var(--accent-rgb), .45), inset 0 1px 2px rgba(255,255,255,.5); } }
+
+.btn-block.primary::before, .btn-save::before { content: ""; position: absolute; top: 0; left: -60%; width: 40%; height: 100%; background: linear-gradient(105deg, transparent, rgba(255,255,255,.5), transparent); transform: skewX(-20deg); pointer-events: none; }
+.btn-block.primary:active::before, .btn-save:active::before { animation: sweep .6s ease-out; }
+@keyframes sweep { to { left: 130%; } }
+
+button.nav-arrow { transition: color .2s, opacity .2s, transform .15s; }
+.nav-arrow:active { transform: translateY(-50%) scale(1.35); }
+.plinth { transition: transform .2s; }
+.plinth:active { transform: scale(.985); }
+.playlist-card .pc-arrow { transition: transform .2s, color .2s; }
+.song-card { transition: border-color .2s, box-shadow .2s; }
+.song-card:focus-within { border-color: var(--accent-dim); box-shadow: 0 0 22px rgba(var(--accent-rgb), .07); }
+.field input:focus, .field-sm input:focus, .field textarea:focus { box-shadow: 0 0 0 3px var(--accent-dim); }
+.toast { animation: toastIn .3s cubic-bezier(.2,.8,.2,1); }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 16px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.play-wrap, .edit-wrap { animation: viewIn .4s cubic-bezier(.2,.8,.2,1); }
+@keyframes viewIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+@media (hover: hover) {
+  .btn:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 8px 20px rgba(0,0,0,.5), 0 0 16px var(--accent-dim); }
+  .btn:active:not(:disabled) { transform: scale(.9); }
+  .btn-block:hover { border-color: var(--accent); box-shadow: 0 0 18px var(--accent-dim); }
+  .btn-block.primary:hover::before, .btn-save:hover::before { animation: sweep .7s ease-out; }
+  .icon-btn:hover:not(:disabled) { border-color: var(--accent); background: rgba(255,255,255,.08); }
+  .icon-btn.danger:hover:not(:disabled) { border-color: var(--danger); box-shadow: 0 0 12px var(--danger-dim); }
+  .playlist-card:hover { border-color: var(--accent-dim); background: rgba(var(--accent-rgb), .04); }
+  .playlist-card:hover .pc-arrow { transform: translateX(4px); color: var(--accent); }
+  .drawer-item:hover { background: rgba(255,255,255,.05); }
+  .nav-arrow:hover { color: var(--accent); }
+}
+
+/* ===== 全螢幕 / 加到主畫面 ===== */
+html { background: var(--bg-dark); }
+body { padding-top: calc(16px + env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+
+/* ===== 主題 / 播放模式 / 範本 ===== */
+:root { --accent-rgb: 0, 229, 255; --vinyl-a: #0d0d0d; --vinyl-b: #151515; }
+body[data-label="solid"] .label { background-image: none !important; background-color: var(--accent); }
+body[data-label="gradient"] .label { background-image: conic-gradient(from 0deg, var(--accent), #ffffff55, var(--accent), #00000055, var(--accent)) !important; }
+
+body.play-mode .plinth-wrapper { width: min(85vw, 340px, 32dvh); }
+.extras { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.pill, .swatch, .seg button { position: relative; overflow: hidden; font-family: inherit; cursor: pointer; }
+.pill { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); color: var(--text-main); padding: 7px 14px; border-radius: 999px; font-size: 13px; transition: border-color .2s, color .2s, box-shadow .2s; }
+.pill.on { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px var(--accent-dim); }
+
+.theme-panel { text-align: left; }
+.theme-label { font-size: 12px; color: var(--text-muted); margin: 14px 0 8px; }
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch { width: 36px; height: 36px; border-radius: 50%; border: 2px solid rgba(255,255,255,.15); padding: 0; transition: transform .15s, border-color .15s; }
+.swatch:active { transform: scale(.88); }
+.swatch.active { border-color: #fff; box-shadow: 0 0 12px rgba(255,255,255,.5); }
+.seg { display: flex; gap: 8px; }
+.seg button { flex: 1; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); color: var(--text-main); padding: 9px 0; border-radius: 10px; font-size: 13px; }
+.seg button.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px var(--accent-dim); }
+
+/* ===== 唱片紋路 ===== */
+.vinyl, .vinyl-face {
+  background:
+    conic-gradient(from 25deg, transparent 0deg, rgba(255,255,255,.22) 26deg, transparent 60deg, transparent 180deg, rgba(255,255,255,.15) 206deg, transparent 240deg),
+    repeating-radial-gradient(circle at 50% 50%, transparent 0, transparent 1.6px, rgba(255,255,255,var(--groove, .16)) 2px, transparent 2.4px),
+    repeating-radial-gradient(circle at 50% 50%, transparent 0, transparent 22px, rgba(0,0,0,.5) 23px, transparent 25px),
+    var(--vinyl-a);
+}
+.vinyl { box-shadow: inset 0 0 0 1px rgba(255,255,255,.1), inset 0 0 26px rgba(0,0,0,.55), 0 0 15px var(--accent-dim); }
+
+/* ===== 外觀面板 ===== */
+.theme-panel { max-height: 88dvh; overflow-y: auto; touch-action: pan-y; }
+.theme-preview { display: grid; place-items: center; margin: 4px 0 2px; }
+.vinyl-face { position: relative; width: 112px; height: 112px; border-radius: 50%; animation: spin 8s linear infinite; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1), inset 0 0 18px rgba(0,0,0,.55), 0 0 18px var(--accent-dim); }
+.vinyl-label { position: absolute; inset: 32%; border-radius: 50%; background: #2a2d40; box-shadow: 0 0 0 2px rgba(255,255,255,.15), 0 0 0 5px rgba(0,0,0,.5); }
+body[data-label="solid"] .vinyl-label { background: var(--accent); }
+body[data-label="gradient"] .vinyl-label { background: conic-gradient(from 0deg, var(--accent), #ffffff55, var(--accent), #00000055, var(--accent)); }
+.picker-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 13px; color: var(--text-muted); }
+.picker-row span { min-width: 34px; }
+.picker-row input[type="color"] { width: 46px; height: 30px; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: none; padding: 2px; cursor: pointer; }
+.picker-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+
+.pill[hidden] { display: none; }
+@media (max-height: 740px) {
+  body.play-mode .eq { display: none; }
+  body.play-mode .plinth-wrapper { width: min(85vw, 340px, 30dvh); }
+}
+@media (max-height: 640px) {
+  body.play-mode .extras .pill { padding: 5px 10px; font-size: 12px; }
+  body.play-mode .btn.primary { width: 60px; height: 60px; }
+}
+
+/* ===== 探索廣場未登入遮罩牆 (修改為上透下實) ===== */
+.explore-guest-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.explore-guest-wrapper.blurred .playlist-grid {
+  max-height: 380px;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 1) 85%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 1) 85%);
+}
+
+.explore-login-overlay {
+  position: relative;
+  margin: -40px auto 20px auto;
+  max-width: 480px;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  background: rgba(18, 20, 26, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--accent-dim);
+  border-radius: 20px;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.85);
+  text-align: center;
+  z-index: 10;
+}
+
+.explore-login-overlay p {
+  font-size: 14px;
+  color: var(--text-main);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.explore-login-overlay .btn-block {
+  width: auto;
+  min-width: 200px;
+  padding: 12px 24px;
+  font-size: 15px;
+}
+
+/* =========================================
+   ===== 背景氛圍特效 (Atmosphere FX) =====
+   ========================================= */
+
+#bg-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 1; /* 在背景之上，內容之下 */
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* 1. 雨夜 (Rainy Night) */
+body.atm-rain #bg-fx {
+  background: linear-gradient(to bottom, rgba(10, 15, 30, 0.4), rgba(5, 5, 10, 0.8));
+}
+body.atm-rain #bg-fx::before {
+  content: "";
+  position: absolute;
+  top: -100%; left: -50%; width: 200%; height: 200%;
+  background-image: 
+    linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0) 100%),
+    linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
+  background-size: 2px 120px, 1px 80px;
+  background-repeat: repeat;
+  animation: rain-fall 0.4s linear infinite;
+  opacity: 0.6;
+}
+@keyframes rain-fall {
+  0% { transform: translateY(0) rotate(10deg); }
+  100% { transform: translateY(100px) rotate(10deg); }
+}
+
+/* 2. 櫻花 (Sakura) */
+body.atm-sakura #bg-fx {
+  background: linear-gradient(to bottom, rgba(40, 10, 20, 0.3), rgba(10, 5, 10, 0.8));
+}
+body.atm-sakura #bg-fx::before {
+  content: "🌸";
+  position: absolute;
+  top: -10%; left: -10%; width: 120%; height: 120%;
+  font-size: 24px;
+  color: rgba(255, 180, 200, 0.8);
+  text-shadow: 0 0 10px rgba(255, 100, 150, 0.5);
+  animation: sakura-fall 8s linear infinite;
+}
+body.atm-sakura #bg-fx::after {
+  content: "🌸";
+  position: absolute;
+  top: -20%; left: -20%; width: 140%; height: 140%;
+  font-size: 16px;
+  color: rgba(255, 200, 220, 0.6);
+  animation: sakura-fall 12s linear infinite reverse;
+  animation-delay: -5s;
+}
+@keyframes sakura-fall {
+  0% { transform: translateY(0) rotate(0deg); }
+  100% { transform: translateY(20vh) rotate(360deg); }
+}
+
+/* 3. 賽博龐克 (Cyberpunk) */
+body.atm-cyberpunk {
+  background: #020005;
+}
+body.atm-cyberpunk #bg-fx {
+  background: 
+    linear-gradient(transparent 0%, rgba(255, 0, 128, 0.05) 50%, transparent 100%),
+    linear-gradient(90deg, transparent 0%, rgba(0, 255, 255, 0.05) 50%, transparent 100%);
+}
+body.atm-cyberpunk #bg-fx::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(0, 255, 255, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 0, 128, 0.15) 1px, transparent 1px);
+  background-size: 30px 30px;
+  transform: perspective(500px) rotateX(60deg) translateY(-100px) translateZ(-200px);
+  transform-origin: top center;
+  animation: grid-move 4s linear infinite;
+  box-shadow: inset 0 0 100px rgba(255, 0, 128, 0.2), inset 0 0 100px rgba(0, 255, 255, 0.2);
+}
+@keyframes grid-move {
+  0% { transform: perspective(500px) rotateX(60deg) translateY(0) translateZ(-200px); }
+  100% { transform: perspective(500px) rotateX(60deg) translateY(30px) translateZ(-200px); }
+}
+
+/* 4. 復古 CRT */
+body.atm-crt #bg-fx {
+  background: radial-gradient(circle at center, transparent 50%, rgba(0,0,0,0.8) 100%);
+}
+body.atm-crt #bg-fx::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background-size: 100% 3px, 6px 100%;
+  z-index: 10;
+  pointer-events: none;
+}
+body.atm-crt #bg-fx::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 16, 16, 0.1);
+  opacity: 0;
+  animation: crt-flicker 0.15s infinite;
+  pointer-events: none;
+}
+@keyframes crt-flicker {
+  0% { opacity: 0.02; }
+  50% { opacity: 0.05; }
+  100% { opacity: 0.02; }
+}
