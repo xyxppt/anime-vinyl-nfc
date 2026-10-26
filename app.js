@@ -3,6 +3,18 @@
 
   var $ = function (id) { return document.getElementById(id); };
 
+  /* ============ 動態注入 3D 翻轉樣式 ============ */
+  (function injectFlipStyle() {
+    var style = document.createElement('style');
+    style.textContent = `
+      .plinth { perspective: 1000px; }
+      .vinyl { transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); transform-style: preserve-3d; }
+      .vinyl.flipped { transform: rotateY(180deg); }
+      .side-badge { position: absolute; top: 12px; right: 16px; font-size: 11px; font-weight: 700; color: var(--text-muted); background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; pointer-events: none; }
+    `;
+    document.head.appendChild(style);
+  })();
+
   /* ============ Firebase 狀態 ============ */
   var currentUser = null;
   var authAPI = null;
@@ -949,10 +961,11 @@
     return el;
   }
 
-  /* ============ 播放視圖 ============ */
+  /* ============ 播放視圖與 A/B 面翻轉邏輯 ============ */
   var player = null;
   var playlist = null;
   var currentIndex = 0;
+  var currentVinylSide = 'A'; // 'A' 或 'B'
   var progressTimer = null;
   var tapTimer = null;
   var lastSec = -1;
@@ -1084,19 +1097,14 @@
 
     styleObj = styleObj || {};
 
-    // 1. 外環顏色 (Vinyl Color)
     if (vinylEl && styleObj.vinylColor) {
       vinylEl.style.backgroundColor = styleObj.vinylColor;
     }
 
-    // 2. 唱片中心圖片/顏色 (Center Color)
-    if (labelEl) {
-      if (styleObj.centerColor) {
-        labelEl.style.backgroundColor = styleObj.centerColor;
-      }
+    if (labelEl && styleObj.centerColor) {
+      labelEl.style.backgroundColor = styleObj.centerColor;
     }
 
-    // 3. 大背景 (Background)
     if (styleObj.bgType === 'image' && styleObj.bgImage) {
       viewPlay.style.backgroundImage = 'url("' + styleObj.bgImage + '")';
       viewPlay.style.backgroundSize = 'cover';
@@ -1120,6 +1128,10 @@
     if (vinylEl) {
       vinylEl.style.backgroundColor = '';
     }
+    currentVinylSide = 'A';
+    var vinyl = document.querySelector('.vinyl');
+    if (vinyl) vinyl.classList.remove('flipped');
+    if ($('sideBtn')) $('sideBtn').textContent = '盤面: A';
   }
 
   function showPlayView(code, isPreview, sid) {
@@ -1156,16 +1168,50 @@
       $('deletePlayBtn').style.display = (isPreview && currentUser && previewFromId) ? 'grid' : 'none';
     }
 
-    if (!same) currentIndex = 0;
-    show('viewPlay');
-    
-    // 渲染專屬自訂風格
-    applyVinylCustomStyle(playlist.customStyle);
+    if (!same) {
+      currentIndex = 0;
+      currentVinylSide = 'A';
+      var vinyl = document.querySelector('.vinyl');
+      if (vinyl) vinyl.classList.remove('flipped');
+      if ($('sideBtn')) $('sideBtn').textContent = '盤面: A';
+    }
 
+    show('viewPlay');
+    applyVinylCustomStyle(playlist.customStyle);
     renderPlayMeta();
     renderDrawer();
     if (!same) initYTPlayer();
     bindSwipeGestures();
+  }
+
+  function switchVinylSide(targetSide) {
+    if (!playlist || !playlist.songs || playlist.songs.length === 0) return;
+    currentVinylSide = targetSide || (currentVinylSide === 'A' ? 'B' : 'A');
+    
+    var vinyl = document.querySelector('.vinyl');
+    if (vinyl) {
+      if (currentVinylSide === 'B') {
+        vinyl.classList.add('flipped');
+      } else {
+        vinyl.classList.remove('flipped');
+      }
+    }
+
+    if ($('sideBtn')) $('sideBtn').textContent = '盤面: ' + currentVinylSide;
+
+    // 計算 A 面與 B 面分界點
+    var half = Math.ceil(playlist.songs.length / 2);
+    if (currentVinylSide === 'B') {
+      if (playlist.songs.length > 1) {
+        toast('翻至 B 面 (曲目 ' + (half + 1) + '~' + playlist.songs.length + ')');
+        goToSong(half);
+      } else {
+        toast('此歌單只有一首歌曲');
+      }
+    } else {
+      toast('翻至 A 面 (曲目 1)');
+      goToSong(0);
+    }
   }
 
   function updateMediaSession() {
@@ -1343,6 +1389,20 @@
   function goToSong(i) {
     if (isPlayHidden() || i < 0 || i >= playlist.songs.length) return;
     currentIndex = i;
+    
+    // 自動根據索引同步 A/B 面狀態
+    var half = Math.ceil(playlist.songs.length / 2);
+    var targetSide = (i >= half && playlist.songs.length > 1) ? 'B' : 'A';
+    if (currentVinylSide !== targetSide) {
+      currentVinylSide = targetSide;
+      var vinyl = document.querySelector('.vinyl');
+      if (vinyl) {
+        if (currentVinylSide === 'B') vinyl.classList.add('flipped');
+        else vinyl.classList.remove('flipped');
+      }
+      if ($('sideBtn')) $('sideBtn').textContent = '盤面: ' + currentVinylSide;
+    }
+
     var s = playlist.songs[i];
     renderPlayMeta();
     renderDrawer();
@@ -1480,7 +1540,25 @@
     if ($('prevArrow')) $('prevArrow').addEventListener('click', function () { goToSong(pickPrev()); });
     if ($('nextArrow')) $('nextArrow').addEventListener('click', function () { goToSong(pickNext(false)); });
     bindMediaKeys();
-    if ($('vinylPlinth')) $('vinylPlinth').addEventListener('click', function () { if ($('playBtn')) $('playBtn').click(); });
+    
+    // 點擊唱片盤面可直接切換 A/B 面翻轉
+    if ($('vinylPlinth')) {
+      $('vinylPlinth').addEventListener('click', function (e) {
+        // 如果點擊的不是播放/暫停，則觸發翻面
+        if (e.target.closest('.vinyl')) {
+          switchVinylSide();
+        } else {
+          if ($('playBtn')) $('playBtn').click();
+        }
+      });
+    }
+
+    // 綁定 A/B 面按鈕點擊事件
+    if ($('sideBtn')) {
+      $('sideBtn').addEventListener('click', function () {
+        switchVinylSide();
+      });
+    }
 
     if ($('prevBtn')) $('prevBtn').addEventListener('click', function () { goToSong(pickPrev()); });
     if ($('nextBtn')) $('nextBtn').addEventListener('click', function () { goToSong(pickNext(false)); });
@@ -1800,14 +1878,13 @@
     if ($('themeDone')) $('themeDone').addEventListener('click', closeThemeModal);
     if (modal) modal.addEventListener('click', function (e) { if (e.target === modal) closeThemeModal(); });
 
-    // 綁定「自訂唱片風格」模組與按鈕邏輯
     bindVinylStyleModal();
   }
 
   /* ============ 自訂唱片風格模組與綁定 ============ */
   function bindVinylStyleModal() {
     var modal = $('vinylStyleModal');
-    var btn = $('themeBtnPlay'); // 播放頁面上的按鈕，名稱為「自訂唱片風格」
+    var btn = $('themeBtnPlay');
 
     if (!modal || !btn) return;
 
@@ -1834,7 +1911,6 @@
     if ($('vinylStyleDone')) $('vinylStyleDone').addEventListener('click', closeModal);
     modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
 
-    // 1. 唱片外環顏色
     if ($('vinylColorPicker')) {
       $('vinylColorPicker').addEventListener('input', function (e) {
         if (!playlist.customStyle) playlist.customStyle = {};
@@ -1844,7 +1920,6 @@
       });
     }
 
-    // 2. 唱片中心顏色 (空字串時自動回復封面)
     if ($('centerColorPicker')) {
       $('centerColorPicker').addEventListener('input', function (e) {
         if (!playlist.customStyle) playlist.customStyle = {};
@@ -1864,7 +1939,6 @@
       });
     }
 
-    // 3. 背景顏色選擇
     if ($('bgColorPicker')) {
       $('bgColorPicker').addEventListener('input', function (e) {
         if (!playlist.customStyle) playlist.customStyle = {};
@@ -1875,7 +1949,6 @@
       });
     }
 
-    // 4. 背景圖片上傳
     if ($('bgImageInput')) {
       $('bgImageInput').addEventListener('change', function (e) {
         var file = e.target.files[0];
@@ -2159,7 +2232,7 @@
 
   function updateAuthUI(user) {
     currentUser = user;
-    ['sleepBtn', 'themeBtn'].forEach(function (id) { if ($(id)) $(id).hidden = !user; });
+    ['sleepBtn', 'themeBtn', 'sideBtn'].forEach(function (id) { if ($(id)) $(id).hidden = !user && id === 'themeBtn'; });
     if (!user) {
       setSleep(0);
       if ($('themeModal')) {
