@@ -108,7 +108,7 @@
       name: name || '新歌單',
       isPublic: false,
       songs: [{ anime: '', title: '', artist: '', videoId: '', cover: '' }],
-      vibe: 'default', // 氣氛主題：default, rain, sakura, cyber, crt
+      vibe: 'default',
       updatedAt: new Date().toISOString()
     };
   }
@@ -858,7 +858,7 @@
     if ($('backLink')) {
       $('backLink').hidden = !currentUser;
       var toEdit = isPreview && previewFromId;
-      $('backLink.href') = toEdit ? '#edit/' + previewFromId : '#home';
+      $('backLink').href = toEdit ? '#edit/' + previewFromId : '#home';
     }
 
     if (!same) {
@@ -978,6 +978,21 @@
     });
   }
 
+  function bindPlayControls() {
+    if ($('playBtn')) $('playBtn').addEventListener('click', () => {
+      if (!player || !player.playVideo) return;
+      if (player.getPlayerState() === 1) player.pauseVideo(); else player.playVideo();
+    });
+    if ($('sideBtn')) $('sideBtn').addEventListener('click', switchVinylSide);
+    if ($('vinylPlinth')) $('vinylPlinth').addEventListener('click', (e) => {
+      if (e.target.closest('.vinyl')) switchVinylSide();
+    });
+    if ($('listToggle')) $('listToggle').addEventListener('click', () => { $('playlistDrawer').hidden = !$('playlistDrawer').hidden; });
+    if ($('drawerClose')) $('drawerClose').addEventListener('click', () => { $('playlistDrawer').hidden = true; });
+  }
+
+  function bindSwipeGestures() {}
+
   /* ============ 全站主題色與氣氛主題控制 ============ */
   var ACCENTS = [['青', '#00e5ff'], ['櫻', '#ff6fb5'], ['紫', '#a78bfa'], ['琥珀', '#ffb020'], ['薄荷', '#34d399'], ['紅蓮', '#ff4757']];
   var theme = { accent: '#00e5ff' };
@@ -1010,7 +1025,6 @@
     if ($('themeBtn')) $('themeBtn').addEventListener('click', () => { $('themeModal').hidden = false; $('themeModal').classList.add('show'); });
     if ($('themeDone')) $('themeDone').addEventListener('click', () => { $('themeModal').classList.remove('show'); setTimeout(() => $('themeModal').hidden = true, 300); });
 
-    // 氣氛主題 Modal
     var vibeModal = $('vibeModal');
     if ($('themeBtnPlay')) $('themeBtnPlay').addEventListener('click', () => { vibeModal.hidden = false; vibeModal.classList.add('show'); });
     if ($('vibeDone')) $('vibeDone').addEventListener('click', () => { vibeModal.classList.remove('show'); setTimeout(() => vibeModal.hidden = true, 300); });
@@ -1018,10 +1032,12 @@
     vibeModal.querySelectorAll('[data-vibe]').forEach(btn => {
       btn.addEventListener('click', () => {
         var v = btn.dataset.vibe;
-        playlist.vibe = v;
-        applyVibeTheme(v);
-        saveDraft();
-        if (currentUser) saveDraftToCloud(true);
+        if (playlist) {
+          playlist.vibe = v;
+          applyVibeTheme(v);
+          saveDraft();
+          if (currentUser) saveDraftToCloud(true);
+        }
         toast('已切換氣氛主題');
       });
     });
@@ -1029,9 +1045,11 @@
 
   /* ============ 初始化 ============ */
   function init() {
-    bindExtras();
+    bindEditorControls();
+    bindPlayControls();
     bindNfcControls();
     bindExploreControls();
+    bindExtras();
     loadDraft();
     route();
     window.addEventListener('hashchange', route);
