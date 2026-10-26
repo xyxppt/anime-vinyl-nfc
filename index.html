@@ -15,6 +15,9 @@
 </head>
 <body>
 
+<!-- 背景特效容器 -->
+<div id="bg-fx"></div>
+
 <!-- ============ 播放視圖 ============ -->
 <main id="viewPlay" hidden>
   <div class="play-wrap" id="playWrap">
@@ -293,13 +296,24 @@
   </div>
 </div>
 
-<!-- ============ 外觀主題 ============ -->
+<!-- ============ 外觀主題面板 ============ -->
 <div class="modal-overlay" id="themeModal" hidden>
   <div class="modal-content theme-panel">
     <h3>🎨 外觀</h3>
-    <p class="theme-label">主題色</p>
+    
+    <p class="theme-label">背景氛圍特效</p>
+    <div class="seg" id="atmosphereSeg" style="grid-template-columns: repeat(2, 1fr); display: grid; gap: 8px;">
+      <button type="button" data-atm="default">預設</button>
+      <button type="button" data-atm="rain">🌧️ 雨夜</button>
+      <button type="button" data-atm="sakura">🌸 櫻花</button>
+      <button type="button" data-atm="cyberpunk">🌆 賽博龐克</button>
+      <button type="button" data-atm="crt">📺 復古 CRT</button>
+    </div>
+
+    <p class="theme-label" style="margin-top: 20px;">主題色</p>
     <div class="swatches" id="accentSwatches"></div>
     <div class="picker-row"><span>自訂</span><input type="color" id="accentPicker" aria-label="自訂主題色"></div>
+    
     <div class="modal-actions" style="margin-top:20px">
       <button class="btn-block ghost" id="themeReset" type="button">重設</button>
       <button class="btn-block primary" id="themeDone" type="button">完成</button>
