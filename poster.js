@@ -13,7 +13,7 @@
 
   // ★★★★★ 請把下面的空陣列換成你的 Firebase UID ★★★★★
   // 例如：var ADMIN_UIDS = ['AbCdEfGhIjKlMnOpQrStUvWxYz12'];
-  var ADMIN_UIDS = [];
+  var ADMIN_UIDS = ['CHcuRjAB6eWdmIiV9QGH209mSa93'];
 
   function isAdmin() { return !!currentUser && ADMIN_UIDS.indexOf(currentUser.uid) !== -1; }
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
