@@ -11,8 +11,7 @@
   var mySubs = { movies: [], bonuses: [], stock_reports: [] };
   var activeTab = 'movies', searchText = '', busy = false, lastRefresh = 0;
 
-  // ★★★★★ 請把下面的空陣列換成你的 Firebase UID ★★★★★
-  // 例如：var ADMIN_UIDS = ['AbCdEfGhIjKlMnOpQrStUvWxYz12'];
+  // ★ 管理員 UID（已填入你的帳號）
   var ADMIN_UIDS = ['CHcuRjAB6eWdmIiV9QGH209mSa93'];
 
   function isAdmin() { return !!currentUser && ADMIN_UIDS.indexOf(currentUser.uid) !== -1; }
@@ -111,12 +110,14 @@
     var adminNote = '';
     if (currentUser) {
       if (ADMIN_UIDS.length === 0) {
-        adminNote = '<div class="poster-notice" style="margin-bottom:12px">⚠️ 管理員 UID 尚未設定（poster.js 的 ADMIN_UIDS 是空的）。目前你不會看到「管理後台」分頁。</div>';
+        adminNote = '<div class="poster-notice" style="margin-bottom:12px">⚠️ 管理員 UID 尚未設定。</div>';
       } else if (!isAdmin()) {
-        adminNote = '<div class="poster-notice" style="margin-bottom:12px">ℹ️ 你目前的 UID：' + esc(currentUser.uid) + '（不在 ADMIN_UIDS 清單中）</div>';
+        adminNote = '<div class="poster-notice" style="margin-bottom:12px">ℹ️ 你目前登入的 UID 是 <code>' + esc(currentUser.uid) + '</code>，不在管理員清單中。<br>清單目前有：<code>' + esc(ADMIN_UIDS.join(', ')) + '</code></div>';
       } else {
-        adminNote = '<div class="poster-notice" style="margin-bottom:12px">✅ 管理員模式已啟用（UID：' + esc(currentUser.uid) + '）</div>';
+        adminNote = '<div class="poster-notice" style="margin-bottom:12px">✅ 管理員模式已啟用（UID：<code>' + esc(currentUser.uid) + '</code>）</div>';
       }
+    } else {
+      adminNote = '<div class="poster-notice" style="margin-bottom:12px">ℹ️ 你目前尚未登入，只能瀏覽已公開資料。</div>';
     }
     return '<section class="poster-hero"><div><span class="poster-kicker">ANIME VINYL · COLLECTOR COMMUNITY</span><h2>電影特典情報</h2><p>查詢電影特典、影城分店回報與最新收藏情報。</p></div><div class="poster-hero-mark">🎬</div></section>' +
       adminNote +
@@ -442,8 +443,13 @@
     authAPI = window.firebaseAuth; dbAPI = window.firebaseDB;
     if (authAPI && authAPI.onAuthStateChanged) {
       authAPI.onAuthStateChanged(authAPI.auth, function (user) {
-        currentUser = user;
-        if (location.hash.indexOf('#poster') === 0) refreshData(true);
+        currentUser = user || null;
+        // 不管在哪個路由都重繪；若在 #poster 才抓資料
+        if (location.hash.indexOf('#poster') === 0) {
+          refreshData(true);
+        } else {
+          render();
+        }
       });
     }
     window.addEventListener('hashchange', showPosterRoute);
