@@ -51,7 +51,7 @@
   function db() { return dbAPI && dbAPI.db; }
   function col(name) { return dbAPI.collection(db(), name); }
   function doc(name, key) { return dbAPI.doc(db(), name, key); }
-  function set(name, key, data) { return dbAPI.setDoc(doc(name, key), data); }
+  function set(name, key, data, mergeOpt) { return dbAPI.setDoc(doc(name, key), data, mergeOpt); }
   function rows(snap) { var out = []; snap.forEach(function (d) { out.push(Object.assign({ id: d.id }, d.data())); }); return out; }
 
   function canDelete(item, ownerField) {
@@ -106,7 +106,6 @@
       ]);
       
       var allMovies = rows(snaps[0]);
-      // 關鍵過濾：如果是一般人，只看得到 published。如果是管理員，看得到全部（才能審核）。
       movies = allMovies.filter(function(m) {
         return m.status === 'published' || isAdmin() || m.createdBy === (currentUser ? currentUser.uid : null);
       });
@@ -165,7 +164,6 @@
   function movieCard(m) {
     var count = bonuses.filter(function (b) { return b.movieId === m.id; }).length;
     var delBtn = canDelete(m, 'createdBy') ? '<button type="button" class="poster-btn danger" data-del="movies" data-id="' + esc(m.id) + '" title="刪除電影" onclick="event.stopPropagation()">🗑</button>' : '';
-    // 顯示審核狀態標籤
     var statusTag = '';
     if (m.status === 'pending') statusTag = '<span class="poster-status unknown" style="position:absolute;top:8px;left:8px">待審核</span>';
     if (m.status === 'rejected') statusTag = '<span class="poster-status soldout" style="position:absolute;top:8px;left:8px">已拒絕</span>';
@@ -298,13 +296,9 @@
       }).join('') : '<p class="poster-empty">你還沒有送出任何資料。</p>') + '</div>';
   }
 
-  // ==========================================
-  // 管理後台：加入「待審核列表」與「通過/拒絕」按鈕
-  // ==========================================
   function renderAdmin() {
     if (!isAdmin()) return '<p class="poster-empty">此頁面僅限管理員使用。</p>';
     
-    // 篩選出所有待審核的電影
     var pendingMovies = movies.filter(function(m){ return m.status === 'pending'; });
     var pendingHtml = pendingMovies.map(function(m) {
       return '<article style="display:flex;align-items:center;gap:10px; padding:12px; border:1px solid rgba(255,255,255,.1); border-radius:10px; margin-bottom:8px; background:rgba(255,255,255,.02)">' +
@@ -357,12 +351,12 @@
       });
     });
 
-    // 處理審核按鈕點擊
+    // 🌟 關鍵修復：使用 setDoc + merge 取代 updateDoc
     app.querySelectorAll('[data-review]').forEach(function (b) {
       b.addEventListener('click', async function() {
         var status = b.dataset.review === 'approve' ? 'published' : 'rejected';
         try {
-          await dbAPI.updateDoc(doc(b.dataset.col, b.dataset.id), { status: status });
+          await set(b.dataset.col, b.dataset.id, { status: status }, { merge: true });
           notify('✅ 審核完成');
           refreshData(true);
         } catch(e) { notify('審核失敗：' + e.message); }
@@ -448,7 +442,6 @@
     el.querySelector('form').addEventListener('submit', async function (e) {
       e.preventDefault(); if (busy) return; busy = true;
       var f = new FormData(e.target), movieId = uid(), bonusTitle = String(f.get('bonusTitle') || '').trim();
-      // 關鍵點：管理員發佈直接 published，普通人發佈是 pending
       var initialStatus = isAdm ? 'published' : 'pending';
 
       try {
