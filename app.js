@@ -2216,7 +2216,7 @@
       if ($('userAvatarPlay')) $('userAvatarPlay').src = avatarUrl;
       
       if ($('userName')) $('userName').textContent = nameStr;
-      if ($('userEmail')) $('userEmail').textContent = user.email || '';
+      if ($('userEmail')) $('userEmail').textContent = (user.email || '') + ' · UID: ' + user.uid;
       if ($('userNamePlay')) $('userNamePlay').textContent = nameStr;
       
       if ($('backLink')) $('backLink').hidden = false;
@@ -2294,7 +2294,7 @@
         
         if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
         clearTimeout(autoSaveTimer);
-        var docRef = dbAPI.doc(dbAPI.doc(dbAPI.db, 'playlists', uid));
+        var docRef = dbAPI.doc(dbAPI.db, 'playlists', uid);
         authAPI.reauthenticateWithPopup(currentUser, authAPI.provider)
           .then(function () {
             return Promise.all(state.playlists.filter(function (p) { return p.shareId; }).map(function (p) {
