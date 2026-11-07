@@ -10,9 +10,35 @@
   var movies = [], bonuses = [], cinemas = [], branches = [], reports = [], favorites = [];
   var mySubs = { movies: [], bonuses: [], stock_reports: [] };
   var activeTab = 'movies', searchText = '', busy = false, lastRefresh = 0;
-  var cinemaCityFilter = ''; // 影城分頁的縣市篩選
+  var cinemaCityFilter = ''; 
 
   var ADMIN_UIDS = ['CHcuRjAB6eWdmIiV9QGH209mSa93'];
+
+  // ==========================================
+  // 全台影城預設資料 (用於一鍵匯入)
+  // ==========================================
+  var DEFAULT_CINEMAS = {
+    "台北市": ["台北信義威秀影城","MUVIE CINEMAS 台北松仁","誠品電影院","台北大巨蛋秀泰影城","喜樂時代影城南港店","台北南港 LaLaport 威秀影城","台北京站威秀影城","總督影城","微風影城","哈拉影城","國賓大戲院","樂聲影城","台北獅子林新光影城","台北真善美劇院","台北西門威秀影城","喜樂時代影城今日店","百老匯數位影城","光點華山電影館","台北長春國賓影城","台北欣欣秀泰影城","光點台北電影館","美麗華大直影城","美麗新大直皇家影城","台北天母新光影城","景美佳佳戲院"],
+    "新北市": ["中和環球威秀影城","喜樂時代影城永和店","鴻金寶麻吉影城","晶冠廣場國賓影城","國家電影及視聽文化中心","天台影城","林口昕境國賓影城","林口 MITSUI OUTLET PARK 威秀影城","淡水禮萊國賓影城","板橋大遠百威秀影城","府中15新北市紀錄片放映院","樹林秀泰影城","土城秀泰影城","新店裕隆城威秀影城"],
+    "基隆市": ["基隆秀泰影城"],
+    "宜蘭縣": ["新月豪華影城","日新戲院","日新戲院統一廳"],
+    "桃園市": ["桃園統領威秀影城","桃園桃知道威秀影城","桃園站前 in89 統領影城","八德置地國賓影城","美麗新台茂影城","桃園青埔新光影城","星橋國際影城","威尼斯影城","中壢光影電影館","桃園光影文化館"],
+    "新竹市": ["新竹大遠百威秀影城","新竹巨城威秀影城"],
+    "新竹縣": ["百老匯數位影城（竹北店）"],
+    "苗栗縣": ["尚順威秀影城"],
+    "台中市": ["台中中港新光影城","台中大遠百威秀影城","MUVIE CINEMAS 台中 TIGER CITY","台中文心秀泰影城","台中站前秀泰影城","台中 iFG 遠雄廣場威秀影城","王牌映画影城","日日新影城","親親影城","台中豐原 in89 豪華影城","中山73影視藝文空間","時代數位3D影城","台中麗寶秀泰影城","全球影城"],
+    "彰化縣": ["員林影城"],
+    "南投縣": ["南投戲院","山明影城"],
+    "雲林縣": ["環球中華影城","雲林北港秀泰影城"],
+    "嘉義市": ["嘉年華影城","嘉義秀泰影城","嘉義影食滙 in89 豪華影城"],
+    "台南市": ["台南大遠百威秀影城","台南 Focus 威秀影城","台南南紡威秀影城","台南西門新光影城","台南仁德秀泰影城","南台影城","全美戲院","麻豆戲院"],
+    "高雄市": ["高雄大遠百威秀影城","高雄 SKM Park 國賓影城","高雄義大國賓影城","高雄大立 in89 豪華影城","高雄鹽埕 in89 駁二電影院","台鋁影城","喜樂時代影城高雄總圖店","環球影城","高雄岡山秀泰影城","高雄夢時代秀泰影城","內惟藝術中心","高雄市電影館"],
+    "屏東縣": ["屏東環球國賓影城","屏東數位影城"],
+    "花蓮縣": ["花蓮秀泰影城","花蓮鐵道電影院","花蓮新天堂威秀影城"],
+    "台東縣": ["台東秀泰影城"],
+    "澎湖縣": ["澎湖昇恆昌 in89 豪華數位影城"],
+    "金門縣": ["金獅影城","國賓影城（金門昇恆昌金湖廣場）"]
+  };
 
   function isAdmin() { return !!currentUser && ADMIN_UIDS.indexOf(currentUser.uid) !== -1; }
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
@@ -30,7 +56,6 @@
   function set(name, key, data) { return dbAPI.setDoc(doc(name, key), data); }
   function rows(snap) { var out = []; snap.forEach(function (d) { out.push(Object.assign({ id: d.id }, d.data())); }); return out; }
 
-  // 是否能刪除：管理員，或本人
   function canDelete(item, ownerField) {
     if (!currentUser || !item) return false;
     if (isAdmin()) return true;
@@ -51,7 +76,7 @@
     }
   }
 
-  /* ---------- 資料載入（防抖） ---------- */
+  /* ---------- 資料載入 ---------- */
   async function refreshData(force) {
     if (!dbAPI || !db()) return;
     if (busy && !force) return;
@@ -62,7 +87,7 @@
         dbAPI.getDocs(dbAPI.query(col('movies'), dbAPI.limit(300))),
         dbAPI.getDocs(dbAPI.query(col('bonuses'), dbAPI.limit(500))),
         dbAPI.getDocs(dbAPI.query(col('cinemas'), dbAPI.limit(200))),
-        dbAPI.getDocs(dbAPI.query(col('branches'), dbAPI.limit(500))),
+        dbAPI.getDocs(dbAPI.query(col('branches'), dbAPI.limit(800))),
         dbAPI.getDocs(dbAPI.query(col('stock_reports'), dbAPI.limit(800)))
       ]);
       movies = rows(snaps[0]).filter(function (x) { return x.status === 'published'; });
@@ -113,7 +138,7 @@
     return '<span class="poster-status">' + esc(s || '未知') + '</span>';
   }
 
-  /* ---------- Header（不再顯示 UID 給一般使用者） ---------- */
+  /* ---------- Header ---------- */
   function header() {
     var adminNote = '';
     if (isAdmin()) {
@@ -132,7 +157,7 @@
       '</nav>';
   }
 
-  /* ---------- 電影卡（管理員/本人可刪） ---------- */
+  /* ---------- 電影卡 ---------- */
   function movieCard(m) {
     var count = bonuses.filter(function (b) { return b.movieId === m.id; }).length;
     var delBtn = canDelete(m, 'createdBy')
@@ -158,7 +183,6 @@
     };
   }
 
-  /* ---------- 特典卡（管理員/本人可刪） ---------- */
   function bonusCard(b) {
     var m = movies.find(function (x) { return x.id === b.movieId; });
     var delBtn = canDelete(b, 'createdBy')
@@ -190,9 +214,8 @@
       (list.length ? list.map(bonusCard).join('') : '<p class="poster-empty">目前沒有符合條件的特典。</p>') + '</div>';
   }
 
-  /* ---------- 影城分店（新功能：模仿開眼電影網的縣市選單） ---------- */
+  /* ---------- 影城分店 ---------- */
   function renderCinemas() {
-    // 取得所有不重複的縣市
     var cities = branches.map(function (b) { return b.city; }).filter(Boolean);
     var uniqueCities = Array.from(new Set(cities)).sort();
 
@@ -207,13 +230,11 @@
       filtered = branches.filter(function (b) { return b.city === cinemaCityFilter; });
     }
 
-    // 如果搜尋框有字，也一併過濾影城名稱
     if (searchText) {
       var q = searchText.toLowerCase();
       filtered = filtered.filter(function (b) { return (b.name + ' ' + (b.city||'')).toLowerCase().indexOf(q) !== -1; });
     }
 
-    // 依照縣市分組
     var grouped = {};
     filtered.forEach(function (b) {
       var c = b.city || '其他';
@@ -224,7 +245,7 @@
     var keys = Object.keys(grouped).sort();
 
     if (!keys.length) {
-      html += '<p class="poster-empty">找不到符合條件的影城分店。</p>';
+      html += '<p class="poster-empty">找不到符合條件的影城分店。若資料庫目前是空的，請管理員至「管理後台」點擊「一鍵匯入全台影城」。</p>';
       return html;
     }
 
@@ -234,12 +255,11 @@
       html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">';
       grouped[city].sort(function(a,b){return a.name.localeCompare(b.name);}).forEach(function (br) {
         var cinema = cinemas.find(function (c) { return c.id === br.cinemaId; });
-        // 計算這間分店有幾筆特典回報（去重複的電影）
         var reportCount = reports.filter(function (r) { return r.branchId === br.id; }).length;
         
         html += '<div style="padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(255,255,255,.02);">' +
           '<strong style="color:#fff;font-size:14px;display:block;margin-bottom:4px">' + esc(br.name) + '</strong>' +
-          '<small style="color:var(--text-muted);display:block;margin-bottom:8px">' + esc(cinema ? cinema.name : '未知影城') + (br.address ? ' · ' + esc(br.address) : '') + '</small>' +
+          '<small style="color:var(--text-muted);display:block;margin-bottom:8px">' + esc(cinema ? cinema.name : '未知影城') + '</small>' +
           '<div style="display:flex;justify-content:space-between;align-items:center">' +
             '<span style="font-size:12px;color:var(--text-muted)">共 ' + reportCount + ' 筆特典回報</span>' +
             '<button class="poster-btn" style="font-size:11px;padding:4px 8px" data-action="city-report" data-id="' + esc(br.id) + '">查詢特典</button>' +
@@ -252,7 +272,6 @@
     return html;
   }
 
-  /* ---------- 最新回報（管理員/本人可刪） ---------- */
   function renderReports() {
     var list = reports.slice().sort(function (a,b) { return new Date(b.createdAt) - new Date(a.createdAt); }).slice(0, 100);
     return '<div class="poster-section-head"><h3>最新庫存回報</h3><span>僅顯示已審核回報</span></div><div class="poster-report-list">' +
@@ -267,7 +286,6 @@
       }).join('') : '<p class="poster-empty">目前還沒有已審核的回報。</p>') + '</div>';
   }
 
-  /* ---------- 我的提交（可刪） ---------- */
   function renderMine() {
     if (!currentUser) return '<p class="poster-empty">請先登入。</p>';
     var all = [];
@@ -285,14 +303,22 @@
       }).join('') : '<p class="poster-empty">你還沒有送出任何資料。</p>') + '</div>';
   }
 
-  /* ---------- 管理後台 ---------- */
+  /* ---------- 管理後台 (加入一鍵匯入) ---------- */
   function renderAdmin() {
     if (!isAdmin()) return '<p class="poster-empty">此頁面僅限管理員使用。</p>';
+    
+    var importBtn = '<div style="padding:16px; background:rgba(0,229,255,.05); border:1px solid var(--accent); border-radius:14px; margin-bottom:16px;">' +
+      '<h4 style="color:var(--accent); margin:0 0 8px 0;">🚀 快速初始化</h4>' +
+      '<p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">點擊下方按鈕，系統會自動將全台影城與分店資料寫入資料庫。</p>' +
+      '<button id="importCinemasBtn" class="poster-btn primary" style="width:100%; font-size:16px; padding:12px;">一鍵匯入全台影城</button>' +
+      '</div>';
+
     return '<div class="poster-section-head"><h3>管理後台</h3><span>審核與影城資料管理</span></div>' +
+      importBtn +
       '<div id="posterPending"><p class="poster-muted">正在讀取待審核資料…</p></div>' +
       '<div class="poster-admin-grid">' +
-        '<form id="cinemaForm" class="poster-form"><h4>新增影城品牌</h4><label>品牌名稱<input name="name" required maxlength="60" placeholder="例如：威秀影城"></label><button class="poster-btn primary">新增影城</button></form>' +
-        '<form id="branchForm" class="poster-form"><h4>新增影城分店</h4><label>影城品牌<select name="cinemaId" required>' + cinemas.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; }).join('') + '</select></label><label>分店名稱<input name="name" required maxlength="80" placeholder="例如：台中大遠百威秀"></label><label>縣市<input name="city" required maxlength="20" placeholder="台中市"></label><label>地址<input name="address" maxlength="150"></label><button class="poster-btn primary">新增分店</button></form>' +
+        '<form id="cinemaForm" class="poster-form"><h4>手動新增影城品牌</h4><label>品牌名稱<input name="name" required maxlength="60" placeholder="例如：威秀影城"></label><button class="poster-btn primary">新增影城</button></form>' +
+        '<form id="branchForm" class="poster-form"><h4>手動新增影城分店</h4><label>影城品牌<select name="cinemaId" required>' + cinemas.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; }).join('') + '</select></label><label>分店名稱<input name="name" required maxlength="80" placeholder="例如：台中大遠百威秀"></label><label>縣市<input name="city" required maxlength="20" placeholder="台中市"></label><label>地址<input name="address" maxlength="150"></label><button class="poster-btn primary">新增分店</button></form>' +
       '</div>';
   }
 
@@ -319,7 +345,6 @@
       });
     }
     
-    // 縣市篩選器事件綁定
     var citySelect = $('cinemaCitySelect');
     if (citySelect) {
       citySelect.addEventListener('change', function () {
@@ -338,7 +363,6 @@
         if (act === 'add-movie') showMovieForm();
         if (act === 'movie') showMovieDetail(b.dataset.id);
         if (act === 'report') showReportForm(b.dataset.id);
-        // 新增：從影城分店頁面點擊「查詢特典」，會直接帶入該分店
         if (act === 'city-report') {
           var brId = b.dataset.id;
           var relatedBonuses = bonuses.filter(function (bn) { return reports.some(function (r) { return r.bonusId === bn.id && r.branchId === brId; }); });
@@ -358,9 +382,70 @@
         askDelete(b.dataset.del, b.dataset.id);
       });
     });
+    
+    // 綁定一鍵匯入按鈕
+    var impBtn = $('importCinemasBtn');
+    if (impBtn) {
+      impBtn.addEventListener('click', importDefaultCinemas);
+    }
+
     var cf = $('cinemaForm'); if (cf) cf.addEventListener('submit', saveCinema);
     var bf = $('branchForm'); if (bf) bf.addEventListener('submit', saveBranch);
     if (activeTab === 'admin') loadPending();
+  }
+
+  /* ---------- 一鍵匯入腳本 ---------- */
+  async function importDefaultCinemas() {
+    if (!isAdmin()) return;
+    if (!confirm('確定要匯入全台預設影城資料嗎？\n這會寫入幾百筆資料，需要幾秒鐘時間，請不要關閉視窗。')) return;
+    
+    var btn = $('importCinemasBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '匯入中，請稍候...'; }
+    notify('開始匯入影城資料...', 5000);
+
+    try {
+      // 1. 先把所有縣市當作「影城品牌 (cinemas)」建立
+      var cinemaMap = {}; // 記錄各縣市的 cinemaId
+      for (var city in DEFAULT_CINEMAS) {
+        var cid = uid();
+        await set('cinemas', cid, {
+          name: city + '在地影城', // 因為每個分店有自己名稱，這裡給個統稱
+          status: 'published',
+          createdAt: stamp(),
+          createdBy: currentUser.uid
+        });
+        cinemaMap[city] = cid;
+      }
+
+      // 2. 批次寫入分店 (branches)
+      var count = 0;
+      for (var cityName in DEFAULT_CINEMAS) {
+        var cid = cinemaMap[cityName];
+        var branchList = DEFAULT_CINEMAS[cityName];
+        for (var i = 0; i < branchList.length; i++) {
+          var bname = branchList[i];
+          await set('branches', uid(), {
+            cinemaId: cid,
+            name: bname,
+            city: cityName,
+            address: '',
+            status: 'published',
+            createdAt: stamp(),
+            createdBy: currentUser.uid
+          });
+          count++;
+        }
+      }
+
+      notify('🎉 成功匯入 ' + Object.keys(DEFAULT_CINEMAS).length + ' 個縣市，共 ' + count + ' 間分店！', 6000);
+      await refreshData(true);
+      activeTab = 'cinemas';
+      render();
+    } catch (e) {
+      console.error('匯入失敗', e);
+      notify('匯入失敗：' + (e.code || e.message), 6000);
+      if (btn) { btn.disabled = false; btn.textContent = '一鍵匯入全台影城'; }
+    }
   }
 
   /* ---------- 刪除 ---------- */
@@ -375,7 +460,6 @@
     });
   }
 
-  /* ---------- Modal 工具 ---------- */
   function modal(content) {
     var old = $('posterModal'); if (old) old.remove();
     var el = document.createElement('div'); el.id = 'posterModal'; el.className = 'poster-modal';
@@ -386,7 +470,6 @@
     return el;
   }
 
-  /* ---------- 新增電影／特典 ---------- */
   function showMovieForm() {
     if (!currentUser) { notify('請先登入才能提交電影與特典資料'); return; }
     var el = modal('<h3>提交電影與特典資料</h3><p class="poster-muted">提交後會進入待審核區，審核通過才會公開。</p>' +
@@ -443,7 +526,6 @@
     });
   }
 
-  /* ---------- 電影詳情 ---------- */
   function showMovieDetail(movieId) {
     var m = movies.find(function (x) { return x.id === movieId; }); if (!m) return;
     var bs = bonuses.filter(function (b) { return b.movieId === movieId; });
@@ -475,7 +557,6 @@
     });
   }
 
-  /* ---------- 回報庫存（走 stock_reports） ---------- */
   function showReportForm(bonusId) {
     if (!currentUser) { notify('請先登入才能回報庫存'); return; }
     if (!branches.length) { notify('目前尚無可選分店，請洽管理員新增影城分店'); return; }
@@ -510,7 +591,6 @@
     });
   }
 
-  /* ---------- 收藏 ---------- */
   async function toggleFavorite(type, targetId) {
     if (!currentUser) { notify('請先登入才能收藏'); return; }
     var existing = favorites.find(function (f) { return f.targetType === type && f.targetId === targetId; });
@@ -522,7 +602,6 @@
     } catch (e) { notify('收藏失敗：' + (e.code || e.message)); }
   }
 
-  /* ---------- 待審核 ---------- */
   async function loadPending() {
     var box = $('posterPending'); if (!box || !isAdmin()) return;
     try {
@@ -565,7 +644,6 @@
     }
   }
 
-  /* ---------- 影城／分店 ---------- */
   async function saveCinema(e) {
     e.preventDefault(); if (!isAdmin()) return;
     var f = new FormData(e.target);
@@ -587,7 +665,6 @@
     } catch (err) { notify('新增失敗：' + (err.code || err.message)); }
   }
 
-  /* ---------- 啟動 ---------- */
   function start() {
     authAPI = window.firebaseAuth; dbAPI = window.firebaseDB;
     if (authAPI && authAPI.onAuthStateChanged) {
