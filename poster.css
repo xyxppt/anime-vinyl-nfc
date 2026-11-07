@@ -1,0 +1,67 @@
+/* Anime Vinyl - Anime Poster module */
+#viewPoster { min-height: 100vh; }
+.poster-wrap { max-width: 980px; }
+.poster-wrap .edit-topbar { gap: 14px; }
+.poster-wrap .edit-topbar h1 { font-size: 20px; margin: 0; }
+.poster-hero { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:26px; margin:18px 0; border:1px solid rgba(0,229,255,.2); border-radius:22px; background:radial-gradient(circle at 85% 15%,rgba(0,229,255,.16),transparent 38%),linear-gradient(135deg,rgba(25,31,45,.96),rgba(9,11,18,.96)); }
+.poster-kicker { color:var(--accent); font-size:10px; letter-spacing:2px; font-weight:800; }
+.poster-hero h2 { font-size:clamp(26px,5vw,38px); margin:8px 0; color:var(--text-main); }
+.poster-hero p,.poster-muted { color:var(--text-muted); font-size:13px; line-height:1.7; margin:0; }
+.poster-hero-mark { font-size:54px; opacity:.85; }
+.poster-toolbar { display:flex; gap:10px; margin:16px 0; }
+.poster-toolbar input { flex:1; min-width:0; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.12); border-radius:12px; color:var(--text-main); padding:12px 14px; font:inherit; }
+.poster-btn { border:1px solid rgba(255,255,255,.14); border-radius:10px; padding:9px 13px; color:var(--text-main); background:rgba(255,255,255,.06); cursor:pointer; font:inherit; font-size:13px; }
+.poster-btn.primary { background:var(--accent); border-color:var(--accent); color:#061015; font-weight:800; }
+.poster-btn.danger { color:#ff9e9e; border-color:rgba(255,100,100,.35); }
+.poster-tabs { display:flex; gap:8px; overflow:auto; border-bottom:1px solid rgba(255,255,255,.1); padding-bottom:10px; }
+.poster-tabs button { flex:0 0 auto; border:0; background:transparent; color:var(--text-muted); padding:10px 14px; border-radius:9px; cursor:pointer; }
+.poster-tabs button.active { background:var(--accent-dim); color:var(--accent); }
+.poster-content { padding:18px 0 50px; }
+.poster-section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:4px 0 16px; }
+.poster-section-head h3 { margin:0; font-size:19px; }
+.poster-section-head span { color:var(--text-muted); font-size:12px; }
+.poster-movie-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:14px; }
+.poster-card { padding:0; text-align:left; overflow:hidden; border:1px solid rgba(255,255,255,.1); border-radius:14px; background:rgba(255,255,255,.035); color:var(--text-main); cursor:pointer; }
+.poster-card img,.poster-placeholder { width:100%; aspect-ratio:2/2.85; object-fit:cover; display:grid; place-items:center; background:linear-gradient(145deg,#242b39,#11151e); color:var(--accent); font-size:38px; }
+.poster-card-copy { display:flex; flex-direction:column; gap:5px; padding:11px; }
+.poster-card-copy strong { font-size:14px; line-height:1.45; }
+.poster-card-copy small,.poster-bonus small,.poster-report-list small,.poster-pending small { color:var(--text-muted); font-size:11px; }
+.poster-bonus-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:12px; }
+.poster-bonus { padding:14px; border:1px solid rgba(255,255,255,.1); border-radius:14px; background:rgba(255,255,255,.035); }
+.poster-bonus-top { display:flex; gap:12px; align-items:center; }
+.poster-bonus-top img,.poster-placeholder.small { width:76px; height:92px; flex:0 0 76px; object-fit:cover; border-radius:8px; background:#1a202c; }
+.poster-placeholder.small { display:grid; place-items:center; font-size:28px; }
+.poster-bonus-top div { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.poster-bonus-top strong { font-size:15px; }
+.poster-bonus p { color:var(--text-muted); font-size:12px; line-height:1.6; }
+.poster-bonus-foot { display:flex; justify-content:space-between; align-items:center; color:var(--text-muted); font-size:11px; }
+.poster-branch-status { display:flex; flex-direction:column; gap:7px; margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,.08); }
+.poster-branch-status span { display:flex; justify-content:space-between; gap:8px; font-size:11px; }
+.poster-status { font-style:normal; font-size:10px; padding:4px 7px; border-radius:20px; background:rgba(255,255,255,.08); white-space:nowrap; }
+.poster-status.available { color:#6ee7b7; background:rgba(16,185,129,.12); }
+.poster-status.soldout { color:#fca5a5; background:rgba(239,68,68,.12); }
+.poster-status.unknown { color:#fcd34d; background:rgba(245,158,11,.12); }
+.poster-report-list { display:flex; flex-direction:column; gap:8px; }
+.poster-report-list article,.poster-pending { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px; border:1px solid rgba(255,255,255,.1); border-radius:12px; background:rgba(255,255,255,.035); }
+.poster-report-list article div,.poster-pending div:first-child { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.poster-empty { grid-column:1/-1; padding:24px; text-align:center; color:var(--text-muted); border:1px dashed rgba(255,255,255,.15); border-radius:12px; font-size:13px; }
+.poster-notice { padding:14px; border-radius:12px; background:rgba(0,229,255,.08); color:var(--text-main); font-size:13px; }
+.poster-notice.error { color:#ffb4b4; background:rgba(239,68,68,.1); }
+.poster-modal { position:fixed; z-index:9999; inset:0; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.78); backdrop-filter:blur(8px); }
+.poster-modal-box { position:relative; width:min(100%,620px); max-height:88vh; overflow:auto; padding:22px; border:1px solid rgba(255,255,255,.14); border-radius:18px; background:#11151f; box-shadow:0 25px 80px rgba(0,0,0,.5); }
+.poster-modal-box h3 { margin:0 34px 10px 0; font-size:20px; }
+.poster-modal-close { position:absolute; right:14px; top:12px; border:0; color:var(--text-main); background:transparent; font-size:20px; cursor:pointer; }
+.poster-form { display:flex; flex-direction:column; gap:11px; margin-top:14px; }
+.poster-form h4 { margin:8px 0 0; color:var(--accent); }
+.poster-form label { display:flex; flex-direction:column; gap:6px; color:var(--text-muted); font-size:12px; }
+.poster-form input,.poster-form select,.poster-form textarea { width:100%; box-sizing:border-box; padding:11px 12px; color:var(--text-main); background:#171d29; border:1px solid rgba(255,255,255,.13); border-radius:9px; font:inherit; }
+.poster-form textarea { min-height:72px; resize:vertical; }
+.poster-form option { background:#171d29; }
+.poster-admin-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-top:22px; }
+.poster-admin-grid .poster-form { padding:15px; border:1px solid rgba(255,255,255,.1); border-radius:14px; }
+.poster-pending { margin:8px 0; }
+.poster-pending div:last-child { display:flex; gap:6px; }
+.poster-detail { display:grid; grid-template-columns:minmax(110px,180px) 1fr; gap:18px; margin:10px 0 24px; }
+.poster-detail img { width:100%; border-radius:10px; }
+.poster-detail p { color:var(--text-muted); font-size:13px; line-height:1.6; }
+@media(max-width:560px) { .poster-toolbar { flex-direction:column; } .poster-toolbar .poster-btn { width:100%; } .poster-hero { padding:19px; } .poster-hero-mark { font-size:38px; } .poster-detail { grid-template-columns:100px 1fr; gap:12px; } .poster-modal-box { padding:18px; } }
