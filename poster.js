@@ -10,6 +10,7 @@
   var movies = [], bonuses = [], cinemas = [], branches = [], reports = [], favorites = [];
   var mySubs = { movies: [], bonuses: [], stock_reports: [] };
   var activeTab = 'movies', searchText = '', busy = false, lastRefresh = 0;
+  var cinemaCityFilter = ''; // 影城分頁的縣市篩選
 
   var ADMIN_UIDS = ['CHcuRjAB6eWdmIiV9QGH209mSa93'];
 
@@ -124,6 +125,7 @@
       '<nav class="poster-tabs">' +
         '<button data-tab="movies" class="' + (activeTab === 'movies' ? 'active' : '') + '">電影情報</button>' +
         '<button data-tab="bonuses" class="' + (activeTab === 'bonuses' ? 'active' : '') + '">特典列表</button>' +
+        '<button data-tab="cinemas" class="' + (activeTab === 'cinemas' ? 'active' : '') + '">影城分店</button>' +
         '<button data-tab="reports" class="' + (activeTab === 'reports' ? 'active' : '') + '">最新回報</button>' +
         (currentUser ? '<button data-tab="mine" class="' + (activeTab === 'mine' ? 'active' : '') + '">我的提交</button>' : '') +
         (isAdmin() ? '<button data-tab="admin" class="' + (activeTab === 'admin' ? 'active' : '') + '">管理後台</button>' : '') +
@@ -188,6 +190,68 @@
       (list.length ? list.map(bonusCard).join('') : '<p class="poster-empty">目前沒有符合條件的特典。</p>') + '</div>';
   }
 
+  /* ---------- 影城分店（新功能：模仿開眼電影網的縣市選單） ---------- */
+  function renderCinemas() {
+    // 取得所有不重複的縣市
+    var cities = branches.map(function (b) { return b.city; }).filter(Boolean);
+    var uniqueCities = Array.from(new Set(cities)).sort();
+
+    var html = '<div class="poster-section-head" style="flex-wrap:wrap"><h3>全台影城分店</h3>' +
+      '<select id="cinemaCitySelect" class="poster-btn" style="padding:6px 12px; border-radius:8px; font-weight:normal; background:#171d29; color:#fff;">' +
+        '<option value="">所有縣市</option>' +
+        uniqueCities.map(function (c) { return '<option value="' + esc(c) + '" ' + (cinemaCityFilter === c ? 'selected' : '') + '>' + esc(c) + '</option>'; }).join('') +
+      '</select></div>';
+
+    var filtered = branches;
+    if (cinemaCityFilter) {
+      filtered = branches.filter(function (b) { return b.city === cinemaCityFilter; });
+    }
+
+    // 如果搜尋框有字，也一併過濾影城名稱
+    if (searchText) {
+      var q = searchText.toLowerCase();
+      filtered = filtered.filter(function (b) { return (b.name + ' ' + (b.city||'')).toLowerCase().indexOf(q) !== -1; });
+    }
+
+    // 依照縣市分組
+    var grouped = {};
+    filtered.forEach(function (b) {
+      var c = b.city || '其他';
+      if (!grouped[c]) grouped[c] = [];
+      grouped[c].push(b);
+    });
+
+    var keys = Object.keys(grouped).sort();
+
+    if (!keys.length) {
+      html += '<p class="poster-empty">找不到符合條件的影城分店。</p>';
+      return html;
+    }
+
+    html += '<div style="display:flex;flex-direction:column;gap:20px;margin-top:10px">';
+    keys.forEach(function (city) {
+      html += '<div><h4 style="margin:0 0 10px 0;color:var(--accent);font-size:15px;">📍 ' + esc(city) + '</h4>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">';
+      grouped[city].sort(function(a,b){return a.name.localeCompare(b.name);}).forEach(function (br) {
+        var cinema = cinemas.find(function (c) { return c.id === br.cinemaId; });
+        // 計算這間分店有幾筆特典回報（去重複的電影）
+        var reportCount = reports.filter(function (r) { return r.branchId === br.id; }).length;
+        
+        html += '<div style="padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(255,255,255,.02);">' +
+          '<strong style="color:#fff;font-size:14px;display:block;margin-bottom:4px">' + esc(br.name) + '</strong>' +
+          '<small style="color:var(--text-muted);display:block;margin-bottom:8px">' + esc(cinema ? cinema.name : '未知影城') + (br.address ? ' · ' + esc(br.address) : '') + '</small>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center">' +
+            '<span style="font-size:12px;color:var(--text-muted)">共 ' + reportCount + ' 筆特典回報</span>' +
+            '<button class="poster-btn" style="font-size:11px;padding:4px 8px" data-action="city-report" data-id="' + esc(br.id) + '">查詢特典</button>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div></div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   /* ---------- 最新回報（管理員/本人可刪） ---------- */
   function renderReports() {
     var list = reports.slice().sort(function (a,b) { return new Date(b.createdAt) - new Date(a.createdAt); }).slice(0, 100);
@@ -237,9 +301,11 @@
     var body;
     if (activeTab === 'movies') body = renderMovies();
     else if (activeTab === 'bonuses') body = renderBonuses();
+    else if (activeTab === 'cinemas') body = renderCinemas();
     else if (activeTab === 'reports') body = renderReports();
     else if (activeTab === 'mine') body = renderMine();
     else body = renderAdmin();
+    
     app.innerHTML = header() + '<section class="poster-content">' + body + '</section>';
 
     var input = $('posterSearch');
@@ -252,17 +318,40 @@
         if (next) { next.focus(); try { next.setSelectionRange(pos, pos); } catch (e) {} }
       });
     }
+    
+    // 縣市篩選器事件綁定
+    var citySelect = $('cinemaCitySelect');
+    if (citySelect) {
+      citySelect.addEventListener('change', function () {
+        cinemaCityFilter = this.value;
+        render();
+      });
+    }
+
     app.querySelectorAll('[data-tab]').forEach(function (b) {
       b.addEventListener('click', function () { activeTab = b.dataset.tab; render(); if (activeTab === 'admin') loadPending(); });
     });
+    
     app.querySelectorAll('[data-action]').forEach(function (b) {
       b.addEventListener('click', function () {
         var act = b.dataset.action;
         if (act === 'add-movie') showMovieForm();
         if (act === 'movie') showMovieDetail(b.dataset.id);
         if (act === 'report') showReportForm(b.dataset.id);
+        // 新增：從影城分店頁面點擊「查詢特典」，會直接帶入該分店
+        if (act === 'city-report') {
+          var brId = b.dataset.id;
+          var relatedBonuses = bonuses.filter(function (bn) { return reports.some(function (r) { return r.bonusId === bn.id && r.branchId === brId; }); });
+          if (relatedBonuses.length) {
+            var bnames = relatedBonuses.map(function(bn){ return bn.title; }).join('、');
+            notify('該分店有回報的特典：' + bnames, 5000);
+          } else {
+            notify('該分店目前沒有特典回報紀錄', 5000);
+          }
+        }
       });
     });
+    
     app.querySelectorAll('[data-del]').forEach(function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation();
