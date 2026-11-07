@@ -411,4 +411,50 @@
         });
       });
     } catch (e) {
-      box.innerHTML = '<p class="poster-notice error">無法讀取
+      box.innerHTML = '<p class="poster-notice error">無法讀取待審核資料：' + esc(e.code || e.message) + '</p>';
+    }
+  }
+
+  /* ---------- 影城／分店 ---------- */
+  async function saveCinema(e) {
+    e.preventDefault(); if (!isAdmin()) return;
+    var f = new FormData(e.target);
+    try {
+      await set('cinemas', uid(), { name: String(f.get('name')).trim(), status: 'published', createdAt: stamp(), createdBy: currentUser.uid });
+      notify('影城品牌已新增'); await refreshData(true);
+    } catch (err) { notify('新增失敗：' + (err.code || err.message)); }
+  }
+  async function saveBranch(e) {
+    e.preventDefault(); if (!isAdmin()) return;
+    var f = new FormData(e.target);
+    try {
+      await set('branches', uid(), {
+        cinemaId: String(f.get('cinemaId')), name: String(f.get('name')).trim(),
+        city: String(f.get('city')).trim(), address: String(f.get('address') || '').trim(),
+        status: 'published', createdAt: stamp(), createdBy: currentUser.uid
+      });
+      notify('分店已新增'); await refreshData(true);
+    } catch (err) { notify('新增失敗：' + (err.code || err.message)); }
+  }
+
+  /* ---------- 啟動 ---------- */
+  function start() {
+    authAPI = window.firebaseAuth; dbAPI = window.firebaseDB;
+    if (authAPI && authAPI.onAuthStateChanged) {
+      authAPI.onAuthStateChanged(authAPI.auth, function (user) {
+        currentUser = user;
+        if (location.hash.indexOf('#poster') === 0) refreshData(true);
+      });
+    }
+    window.addEventListener('hashchange', showPosterRoute);
+    showPosterRoute();
+    if (window.firebaseAuth && window.firebaseDB) refreshData(true);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+  window.addEventListener('firebaseReady', function () {
+    if (!authAPI) { authAPI = window.firebaseAuth; dbAPI = window.firebaseDB; }
+    if (location.hash.indexOf('#poster') === 0) refreshData(true);
+  });
+})();
