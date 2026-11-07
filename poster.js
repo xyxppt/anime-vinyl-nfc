@@ -8,9 +8,11 @@
   var $ = function (id) { return document.getElementById(id); };
   var authAPI = null, dbAPI = null, currentUser = null;
   var movies = [], bonuses = [], cinemas = [], branches = [], reports = [], favorites = [];
+  var mySubs = { movies: [], bonuses: [], stock_reports: [] };
   var activeTab = 'movies', searchText = '', busy = false, lastRefresh = 0;
 
-  // ★ 填入你的 Firebase Authentication UID
+  // ★★★★★ 請把下面的空陣列換成你的 Firebase UID ★★★★★
+  // 例如：var ADMIN_UIDS = ['AbCdEfGhIjKlMnOpQrStUvWxYz12'];
   var ADMIN_UIDS = [];
 
   function isAdmin() { return !!currentUser && ADMIN_UIDS.indexOf(currentUser.uid) !== -1; }
@@ -18,9 +20,9 @@
   function uid() { return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
   function stamp() { return new Date().toISOString(); }
   function dateText(v) { if (!v) return '未提供'; var d = new Date(v); return isNaN(d) ? '未提供' : d.toLocaleDateString('zh-TW'); }
-  function notify(message) {
+  function notify(message, ms) {
     var t = $('toast');
-    if (t) { t.textContent = message; t.hidden = false; clearTimeout(notify.timer); notify.timer = setTimeout(function () { t.hidden = true; }, 3500); }
+    if (t) { t.textContent = message; t.hidden = false; clearTimeout(notify.timer); notify.timer = setTimeout(function () { t.hidden = true; }, ms || 3500); }
     else window.alert(message);
   }
   function db() { return dbAPI && dbAPI.db; }
@@ -64,7 +66,11 @@
       if (currentUser) {
         var fs = await dbAPI.getDocs(dbAPI.query(col('favorites'), dbAPI.where('uid', '==', currentUser.uid), dbAPI.limit(300)));
         favorites = rows(fs);
-      } else favorites = [];
+        await loadMySubs();
+      } else {
+        favorites = [];
+        mySubs = { movies: [], bonuses: [], stock_reports: [] };
+      }
       lastRefresh = Date.now();
       render();
     } catch (e) {
@@ -73,16 +79,55 @@
     } finally { busy = false; }
   }
 
+  async function loadMySubs() {
+    if (!currentUser) return;
+    try {
+      var ms = await dbAPI.getDocs(dbAPI.query(col('movies'), dbAPI.where('createdBy', '==', currentUser.uid), dbAPI.limit(100)));
+      var bs = await dbAPI.getDocs(dbAPI.query(col('bonuses'), dbAPI.where('createdBy', '==', currentUser.uid), dbAPI.limit(200)));
+      var rs = await dbAPI.getDocs(dbAPI.query(col('stock_reports'), dbAPI.where('reporterUid', '==', currentUser.uid), dbAPI.limit(200)));
+      mySubs.movies = rows(ms);
+      mySubs.bonuses = rows(bs);
+      mySubs.stock_reports = rows(rs);
+    } catch (e) {
+      console.warn('讀取我的提交失敗', e);
+    }
+  }
+
   function posterMessage(text, error) {
     var app = $('posterApp'); if (!app) return;
     app.innerHTML = '<div class="poster-notice ' + (error ? 'error' : '') + '">' + esc(text) + '</div>';
   }
 
-  /* ---------- 渲染 ---------- */
+  /* ---------- 狀態徽章 ---------- */
+  function statusBadge(s) {
+    if (s === 'pending') return '<span class="poster-status unknown">待審核</span>';
+    if (s === 'published' || s === 'approved') return '<span class="poster-status available">已公開</span>';
+    if (s === 'rejected') return '<span class="poster-status soldout">已拒絕</span>';
+    return '<span class="poster-status">' + esc(s || '未知') + '</span>';
+  }
+
+  /* ---------- Header ---------- */
   function header() {
+    var adminNote = '';
+    if (currentUser) {
+      if (ADMIN_UIDS.length === 0) {
+        adminNote = '<div class="poster-notice" style="margin-bottom:12px">⚠️ 管理員 UID 尚未設定（poster.js 的 ADMIN_UIDS 是空的）。目前你不會看到「管理後台」分頁。</div>';
+      } else if (!isAdmin()) {
+        adminNote = '<div class="poster-notice" style="margin-bottom:12px">ℹ️ 你目前的 UID：' + esc(currentUser.uid) + '（不在 ADMIN_UIDS 清單中）</div>';
+      } else {
+        adminNote = '<div class="poster-notice" style="margin-bottom:12px">✅ 管理員模式已啟用（UID：' + esc(currentUser.uid) + '）</div>';
+      }
+    }
     return '<section class="poster-hero"><div><span class="poster-kicker">ANIME VINYL · COLLECTOR COMMUNITY</span><h2>電影特典情報</h2><p>查詢電影特典、影城分店回報與最新收藏情報。</p></div><div class="poster-hero-mark">🎬</div></section>' +
+      adminNote +
       '<div class="poster-toolbar"><input id="posterSearch" type="search" placeholder="搜尋電影、作品或特典…" value="' + esc(searchText) + '"><button class="poster-btn primary" data-action="add-movie">＋ 新增電影／特典</button></div>' +
-      '<nav class="poster-tabs"><button data-tab="movies" class="' + (activeTab === 'movies' ? 'active' : '') + '">電影情報</button><button data-tab="bonuses" class="' + (activeTab === 'bonuses' ? 'active' : '') + '">特典列表</button><button data-tab="reports" class="' + (activeTab === 'reports' ? 'active' : '') + '">最新回報</button>' + (isAdmin() ? '<button data-tab="admin" class="' + (activeTab === 'admin' ? 'active' : '') + '">管理後台</button>' : '') + '</nav>';
+      '<nav class="poster-tabs">' +
+        '<button data-tab="movies" class="' + (activeTab === 'movies' ? 'active' : '') + '">電影情報</button>' +
+        '<button data-tab="bonuses" class="' + (activeTab === 'bonuses' ? 'active' : '') + '">特典列表</button>' +
+        '<button data-tab="reports" class="' + (activeTab === 'reports' ? 'active' : '') + '">最新回報</button>' +
+        (currentUser ? '<button data-tab="mine" class="' + (activeTab === 'mine' ? 'active' : '') + '">我的提交</button>' : '') +
+        (isAdmin() ? '<button data-tab="admin" class="' + (activeTab === 'admin' ? 'active' : '') + '">管理後台</button>' : '') +
+      '</nav>';
   }
 
   function movieCard(m) {
@@ -138,6 +183,22 @@
       }).join('') : '<p class="poster-empty">目前還沒有已審核的回報。</p>') + '</div>';
   }
 
+  /* ---------- 我的提交 ---------- */
+  function renderMine() {
+    if (!currentUser) return '<p class="poster-empty">請先登入。</p>';
+    var all = [];
+    mySubs.movies.forEach(function (m) { all.push({ type: '電影', title: m.title, status: m.status, at: m.createdAt, id: m.id }); });
+    mySubs.bonuses.forEach(function (b) { all.push({ type: '特典', title: b.title, status: b.status, at: b.createdAt, id: b.id }); });
+    mySubs.stock_reports.forEach(function (r) { all.push({ type: '庫存回報', title: r.stockStatus + (r.note ? '（' + r.note + '）' : ''), status: r.status, at: r.createdAt, id: r.id }); });
+    all.sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
+    return '<div class="poster-section-head"><h3>我的提交</h3><span>' + all.length + ' 筆</span></div>' +
+      '<div class="poster-report-list">' +
+      (all.length ? all.map(function (x) {
+        return '<article><div><strong>' + esc(x.type) + '：' + esc(x.title) + '</strong><small>' + esc(dateText(x.at)) + '</small></div>' + statusBadge(x.status) + '</article>';
+      }).join('') : '<p class="poster-empty">你還沒有送出任何資料。</p>') + '</div>';
+  }
+
+  /* ---------- 管理後台 ---------- */
   function renderAdmin() {
     if (!isAdmin()) return '<p class="poster-empty">此頁面僅限管理員使用。</p>';
     return '<div class="poster-section-head"><h3>管理後台</h3><span>審核與影城資料管理</span></div>' +
@@ -154,6 +215,7 @@
     if (activeTab === 'movies') body = renderMovies();
     else if (activeTab === 'bonuses') body = renderBonuses();
     else if (activeTab === 'reports') body = renderReports();
+    else if (activeTab === 'mine') body = renderMine();
     else body = renderAdmin();
     app.innerHTML = header() + '<section class="poster-content">' + body + '</section>';
 
@@ -240,8 +302,13 @@
             status: 'pending', createdBy: currentUser.uid, createdAt: stamp()
           });
         }
-        el.remove(); notify('已送出，等待管理員審核'); await refreshData(true);
-      } catch (err) { notify('送出失敗：' + (err.code || err.message)); }
+        el.remove();
+        notify('✅ 已送出，等待管理員審核。已切換到「我的提交」讓你看狀態。', 6000);
+        activeTab = 'mine';
+        await refreshData(true);
+      } catch (err) {
+        notify('送出失敗：' + (err.code || err.message), 6000);
+      }
       finally { busy = false; }
     });
   }
@@ -267,7 +334,7 @@
   /* ---------- 回報庫存（走 stock_reports） ---------- */
   function showReportForm(bonusId) {
     if (!currentUser) { notify('請先登入才能回報庫存'); return; }
-    if (!branches.length) { notify('目前尚無可選分店'); return; }
+    if (!branches.length) { notify('目前尚無可選分店，請洽管理員新增影城分店'); return; }
     var bonus = bonuses.find(function (b) { return b.id === bonusId; });
     var el = modal('<h3>回報特典庫存</h3><p class="poster-muted">' + esc(bonus ? bonus.title : '特典') + '</p>' +
       '<form id="stockForm" class="poster-form">' +
@@ -291,8 +358,11 @@
           note: String(f.get('note') || '').trim(),
           status: 'pending', reporterUid: currentUser.uid, createdAt: stamp()
         });
-        el.remove(); notify('回報已送出，審核後會顯示');
-      } catch (err) { notify('回報失敗：' + (err.code || err.message)); }
+        el.remove();
+        notify('✅ 回報已送出，等待審核。已切換到「我的提交」。', 6000);
+        activeTab = 'mine';
+        await refreshData(true);
+      } catch (err) { notify('回報失敗：' + (err.code || err.message), 6000); }
     });
   }
 
@@ -337,54 +407,8 @@
             notify('審核完成');
             await refreshData(true);
             if (activeTab === 'admin') loadPending();
-          } catch (e) { notify('審核失敗：' + (e.code || e.message)); }
+          } catch (e) { notify('審核失敗：' + (e.code || e.message), 6000); }
         });
       });
     } catch (e) {
-      box.innerHTML = '<p class="poster-notice error">無法讀取待審核資料：' + esc(e.code || e.message) + '</p>';
-    }
-  }
-
-  /* ---------- 影城／分店 ---------- */
-  async function saveCinema(e) {
-    e.preventDefault(); if (!isAdmin()) return;
-    var f = new FormData(e.target);
-    try {
-      await set('cinemas', uid(), { name: String(f.get('name')).trim(), status: 'published', createdAt: stamp(), createdBy: currentUser.uid });
-      notify('影城品牌已新增'); await refreshData(true);
-    } catch (err) { notify('新增失敗：' + (err.code || err.message)); }
-  }
-  async function saveBranch(e) {
-    e.preventDefault(); if (!isAdmin()) return;
-    var f = new FormData(e.target);
-    try {
-      await set('branches', uid(), {
-        cinemaId: String(f.get('cinemaId')), name: String(f.get('name')).trim(),
-        city: String(f.get('city')).trim(), address: String(f.get('address') || '').trim(),
-        status: 'published', createdAt: stamp(), createdBy: currentUser.uid
-      });
-      notify('分店已新增'); await refreshData(true);
-    } catch (err) { notify('新增失敗：' + (err.code || err.message)); }
-  }
-
-  /* ---------- 啟動 ---------- */
-  function start() {
-    authAPI = window.firebaseAuth; dbAPI = window.firebaseDB;
-    if (authAPI && authAPI.onAuthStateChanged) {
-      authAPI.onAuthStateChanged(authAPI.auth, function (user) {
-        currentUser = user;
-        if (location.hash.indexOf('#poster') === 0) refreshData(true);
-      });
-    }
-    window.addEventListener('hashchange', showPosterRoute);
-    showPosterRoute();
-    if (window.firebaseAuth && window.firebaseDB) refreshData(true);
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-  else start();
-  window.addEventListener('firebaseReady', function () {
-    if (!authAPI) { authAPI = window.firebaseAuth; dbAPI = window.firebaseDB; }
-    if (location.hash.indexOf('#poster') === 0) refreshData(true);
-  });
-})();
+      box.innerHTML = '<p class="poster-notice error">無法讀取
