@@ -11,7 +11,6 @@
   var mySubs = { movies: [], bonuses: [], stock_reports: [] };
   var activeTab = 'movies', searchText = '', busy = false, lastRefresh = 0;
 
-  // ★ 管理員 UID（已填入你的帳號）
   var ADMIN_UIDS = ['CHcuRjAB6eWdmIiV9QGH209mSa93'];
 
   function isAdmin() { return !!currentUser && ADMIN_UIDS.indexOf(currentUser.uid) !== -1; }
@@ -29,6 +28,14 @@
   function doc(name, key) { return dbAPI.doc(db(), name, key); }
   function set(name, key, data) { return dbAPI.setDoc(doc(name, key), data); }
   function rows(snap) { var out = []; snap.forEach(function (d) { out.push(Object.assign({ id: d.id }, d.data())); }); return out; }
+
+  // 是否能刪除：管理員，或本人
+  function canDelete(item, ownerField) {
+    if (!currentUser || !item) return false;
+    if (isAdmin()) return true;
+    var owner = item[ownerField || 'createdBy'];
+    return owner === currentUser.uid;
+  }
 
   /* ---------- 路由 ---------- */
   function showPosterRoute() {
@@ -105,19 +112,11 @@
     return '<span class="poster-status">' + esc(s || '未知') + '</span>';
   }
 
-  /* ---------- Header ---------- */
+  /* ---------- Header（不再顯示 UID 給一般使用者） ---------- */
   function header() {
     var adminNote = '';
-    if (currentUser) {
-      if (ADMIN_UIDS.length === 0) {
-        adminNote = '<div class="poster-notice" style="margin-bottom:12px">⚠️ 管理員 UID 尚未設定。</div>';
-      } else if (!isAdmin()) {
-        adminNote = '<div class="poster-notice" style="margin-bottom:12px">ℹ️ 你目前登入的 UID 是 <code>' + esc(currentUser.uid) + '</code>，不在管理員清單中。<br>清單目前有：<code>' + esc(ADMIN_UIDS.join(', ')) + '</code></div>';
-      } else {
-        adminNote = '<div class="poster-notice" style="margin-bottom:12px">✅ 管理員模式已啟用（UID：<code>' + esc(currentUser.uid) + '</code>）</div>';
-      }
-    } else {
-      adminNote = '<div class="poster-notice" style="margin-bottom:12px">ℹ️ 你目前尚未登入，只能瀏覽已公開資料。</div>';
+    if (isAdmin()) {
+      adminNote = '<div class="poster-notice" style="margin-bottom:12px">✅ 管理員模式</div>';
     }
     return '<section class="poster-hero"><div><span class="poster-kicker">ANIME VINYL · COLLECTOR COMMUNITY</span><h2>電影特典情報</h2><p>查詢電影特典、影城分店回報與最新收藏情報。</p></div><div class="poster-hero-mark">🎬</div></section>' +
       adminNote +
@@ -131,11 +130,19 @@
       '</nav>';
   }
 
+  /* ---------- 電影卡（管理員/本人可刪） ---------- */
   function movieCard(m) {
     var count = bonuses.filter(function (b) { return b.movieId === m.id; }).length;
-    return '<button class="poster-card" data-action="movie" data-id="' + esc(m.id) + '">' +
-      (m.posterUrl ? '<img src="' + esc(m.posterUrl) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '<span class="poster-placeholder">🎞️</span>') +
-      '<span class="poster-card-copy"><strong>' + esc(m.title) + '</strong><small>' + esc(m.releaseDate ? dateText(m.releaseDate) + ' 上映' : '上映日期未提供') + '</small><small>' + count + ' 項特典情報</small></span></button>';
+    var delBtn = canDelete(m, 'createdBy')
+      ? '<button type="button" class="poster-btn danger" data-del="movies" data-id="' + esc(m.id) + '" title="刪除電影" onclick="event.stopPropagation()">🗑</button>'
+      : '';
+    return '<div class="poster-card-wrap" style="position:relative">' +
+      '<button class="poster-card" data-action="movie" data-id="' + esc(m.id) + '">' +
+        (m.posterUrl ? '<img src="' + esc(m.posterUrl) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '<span class="poster-placeholder">🎞️</span>') +
+        '<span class="poster-card-copy"><strong>' + esc(m.title) + '</strong><small>' + esc(m.releaseDate ? dateText(m.releaseDate) + ' 上映' : '上映日期未提供') + '</small><small>' + count + ' 項特典情報</small></span>' +
+      '</button>' +
+      (delBtn ? '<div style="position:absolute;top:8px;right:8px;z-index:2">' + delBtn + '</div>' : '') +
+    '</div>';
   }
 
   function statusFor(bonusId, branchId) {
@@ -149,14 +156,22 @@
     };
   }
 
+  /* ---------- 特典卡（管理員/本人可刪） ---------- */
   function bonusCard(b) {
     var m = movies.find(function (x) { return x.id === b.movieId; });
-    return '<article class="poster-bonus"><div class="poster-bonus-top">' +
-      (b.imageUrl ? '<img src="' + esc(b.imageUrl) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '<span class="poster-placeholder small">🎁</span>') +
-      '<div><strong>' + esc(b.title) + '</strong><small>' + esc(m ? m.title : '電影資料') + ' · ' + esc(b.type || '其他特典') + '</small><small>' + esc(dateText(b.startDate)) + ' ～ ' + esc(dateText(b.endDate)) + '</small></div></div>' +
+    var delBtn = canDelete(b, 'createdBy')
+      ? '<button type="button" class="poster-btn danger" data-del="bonuses" data-id="' + esc(b.id) + '" title="刪除特典">🗑</button>'
+      : '';
+    return '<article class="poster-bonus" style="position:relative">' +
+      (delBtn ? '<div style="position:absolute;top:10px;right:10px;z-index:2">' + delBtn + '</div>' : '') +
+      '<div class="poster-bonus-top">' +
+        (b.imageUrl ? '<img src="' + esc(b.imageUrl) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '<span class="poster-placeholder small">🎁</span>') +
+        '<div><strong>' + esc(b.title) + '</strong><small>' + esc(m ? m.title : '電影資料') + ' · ' + esc(b.type || '其他特典') + '</small><small>' + esc(dateText(b.startDate)) + ' ～ ' + esc(dateText(b.endDate)) + '</small></div>' +
+      '</div>' +
       '<p>' + esc(b.conditions || '兌換條件未提供') + '</p>' +
       '<div class="poster-bonus-foot"><span>' + branches.length + ' 間分店</span><button class="poster-btn" data-action="report" data-id="' + esc(b.id) + '">回報庫存</button></div>' +
-      '<div class="poster-branch-status">' + branches.slice(0, 4).map(function (br) { var s = statusFor(b.id, br.id); return '<span><b>' + esc(br.name) + '</b><i class="poster-status ' + s.cls + '">' + esc(s.label) + '</i></span>'; }).join('') + '</div></article>';
+      '<div class="poster-branch-status">' + branches.slice(0, 4).map(function (br) { var s = statusFor(b.id, br.id); return '<span><b>' + esc(br.name) + '</b><i class="poster-status ' + s.cls + '">' + esc(s.label) + '</i></span>'; }).join('') + '</div>' +
+    '</article>';
   }
 
   function renderMovies() {
@@ -173,6 +188,7 @@
       (list.length ? list.map(bonusCard).join('') : '<p class="poster-empty">目前沒有符合條件的特典。</p>') + '</div>';
   }
 
+  /* ---------- 最新回報（管理員/本人可刪） ---------- */
   function renderReports() {
     var list = reports.slice().sort(function (a,b) { return new Date(b.createdAt) - new Date(a.createdAt); }).slice(0, 100);
     return '<div class="poster-section-head"><h3>最新庫存回報</h3><span>僅顯示已審核回報</span></div><div class="poster-report-list">' +
@@ -180,22 +196,28 @@
         var b = bonuses.find(function (x) { return x.id === r.bonusId; });
         var br = branches.find(function (x) { return x.id === r.branchId; });
         var m = b && movies.find(function (x) { return x.id === b.movieId; });
-        return '<article><div><strong>' + esc(m ? m.title : '電影') + ' · ' + esc(b ? b.title : '特典') + '</strong><small>' + esc(br ? br.name : '分店') + ' · ' + esc(dateText(r.createdAt)) + '</small></div><span class="poster-status ' + (r.stockStatus === '尚有庫存' ? 'available' : 'soldout') + '">' + esc(r.stockStatus) + '</span></article>';
+        var delBtn = canDelete(r, 'reporterUid')
+          ? '<button type="button" class="poster-btn danger" data-del="stock_reports" data-id="' + esc(r.id) + '" title="刪除回報">🗑</button>'
+          : '';
+        return '<article style="display:flex;align-items:center;gap:10px"><div style="flex:1"><strong>' + esc(m ? m.title : '電影') + ' · ' + esc(b ? b.title : '特典') + '</strong><small>' + esc(br ? br.name : '分店') + ' · ' + esc(dateText(r.createdAt)) + '</small></div><span class="poster-status ' + (r.stockStatus === '尚有庫存' ? 'available' : 'soldout') + '">' + esc(r.stockStatus) + '</span>' + delBtn + '</article>';
       }).join('') : '<p class="poster-empty">目前還沒有已審核的回報。</p>') + '</div>';
   }
 
-  /* ---------- 我的提交 ---------- */
+  /* ---------- 我的提交（可刪） ---------- */
   function renderMine() {
     if (!currentUser) return '<p class="poster-empty">請先登入。</p>';
     var all = [];
-    mySubs.movies.forEach(function (m) { all.push({ type: '電影', title: m.title, status: m.status, at: m.createdAt, id: m.id }); });
-    mySubs.bonuses.forEach(function (b) { all.push({ type: '特典', title: b.title, status: b.status, at: b.createdAt, id: b.id }); });
-    mySubs.stock_reports.forEach(function (r) { all.push({ type: '庫存回報', title: r.stockStatus + (r.note ? '（' + r.note + '）' : ''), status: r.status, at: r.createdAt, id: r.id }); });
+    mySubs.movies.forEach(function (m) { all.push({ type: '電影', title: m.title, status: m.status, at: m.createdAt, id: m.id, collection: 'movies', owner: 'createdBy', raw: m }); });
+    mySubs.bonuses.forEach(function (b) { all.push({ type: '特典', title: b.title, status: b.status, at: b.createdAt, id: b.id, collection: 'bonuses', owner: 'createdBy', raw: b }); });
+    mySubs.stock_reports.forEach(function (r) { all.push({ type: '庫存回報', title: r.stockStatus + (r.note ? '（' + r.note + '）' : ''), status: r.status, at: r.createdAt, id: r.id, collection: 'stock_reports', owner: 'reporterUid', raw: r }); });
     all.sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
     return '<div class="poster-section-head"><h3>我的提交</h3><span>' + all.length + ' 筆</span></div>' +
       '<div class="poster-report-list">' +
       (all.length ? all.map(function (x) {
-        return '<article><div><strong>' + esc(x.type) + '：' + esc(x.title) + '</strong><small>' + esc(dateText(x.at)) + '</small></div>' + statusBadge(x.status) + '</article>';
+        var delBtn = canDelete(x.raw, x.owner)
+          ? '<button type="button" class="poster-btn danger" data-del="' + x.collection + '" data-id="' + esc(x.id) + '" title="刪除">🗑</button>'
+          : '';
+        return '<article style="display:flex;align-items:center;gap:10px"><div style="flex:1"><strong>' + esc(x.type) + '：' + esc(x.title) + '</strong><small>' + esc(dateText(x.at)) + '</small></div>' + statusBadge(x.status) + delBtn + '</article>';
       }).join('') : '<p class="poster-empty">你還沒有送出任何資料。</p>') + '</div>';
   }
 
@@ -241,9 +263,27 @@
         if (act === 'report') showReportForm(b.dataset.id);
       });
     });
+    app.querySelectorAll('[data-del]').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        askDelete(b.dataset.del, b.dataset.id);
+      });
+    });
     var cf = $('cinemaForm'); if (cf) cf.addEventListener('submit', saveCinema);
     var bf = $('branchForm'); if (bf) bf.addEventListener('submit', saveBranch);
     if (activeTab === 'admin') loadPending();
+  }
+
+  /* ---------- 刪除 ---------- */
+  function askDelete(collection, id) {
+    if (!currentUser) { notify('請先登入'); return; }
+    if (!confirm('確定要刪除這筆資料嗎？此操作無法復原。')) return;
+    dbAPI.deleteDoc(doc(collection, id)).then(function () {
+      notify('✅ 已刪除');
+      refreshData(true);
+    }).catch(function (e) {
+      notify('刪除失敗：' + (e.code || e.message), 6000);
+    });
   }
 
   /* ---------- Modal 工具 ---------- */
@@ -319,16 +359,30 @@
     var m = movies.find(function (x) { return x.id === movieId; }); if (!m) return;
     var bs = bonuses.filter(function (b) { return b.movieId === movieId; });
     var fav = favorites.some(function (f) { return f.targetId === movieId && f.targetType === 'movie'; });
+    var delMovie = canDelete(m, 'createdBy')
+      ? '<button class="poster-btn danger" data-del-detail="movies" data-id="' + esc(movieId) + '">🗑 刪除電影</button>'
+      : '';
     var html = '<div class="poster-detail">' +
       (m.posterUrl ? '<img src="' + esc(m.posterUrl) + '" alt="電影海報">' : '') +
       '<div><span class="poster-kicker">MOVIE INFORMATION</span><h3>' + esc(m.title) + '</h3><p>' + esc(m.alias || '') + '</p><p>上映日期：' + esc(dateText(m.releaseDate)) + '</p><p>' + esc(m.description || '暫無介紹') + '</p>' +
-      '<button class="poster-btn" data-fav="' + (fav ? 'remove' : 'add') + '" data-id="' + esc(movieId) + '">' + (fav ? '★ 已收藏' : '☆ 收藏電影') + '</button></div></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="poster-btn" data-fav="' + (fav ? 'remove' : 'add') + '" data-id="' + esc(movieId) + '">' + (fav ? '★ 已收藏' : '☆ 收藏電影') + '</button>' +
+        delMovie +
+      '</div></div></div>' +
       '<h4>相關特典</h4><div class="poster-bonus-grid">' + (bs.length ? bs.map(bonusCard).join('') : '<p class="poster-empty">目前沒有已公開的特典。</p>') + '</div>';
     var el = modal(html);
     var favBtn = el.querySelector('[data-fav]');
     if (favBtn) favBtn.addEventListener('click', function () { toggleFavorite('movie', movieId); el.remove(); });
     el.querySelectorAll('[data-action="report"]').forEach(function (b) {
       b.addEventListener('click', function () { el.remove(); showReportForm(b.dataset.id); });
+    });
+    el.querySelectorAll('[data-del-detail]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('確定要刪除這部電影嗎？相關特典不會自動刪除，請自行確認。')) return;
+        dbAPI.deleteDoc(doc(b.dataset.delDetail, b.dataset.id)).then(function () {
+          notify('✅ 已刪除電影'); el.remove(); refreshData(true);
+        }).catch(function (e) { notify('刪除失敗：' + (e.code || e.message), 6000); });
+      });
     });
   }
 
@@ -395,7 +449,8 @@
                       '庫存回報：' + (d.stockStatus || '');
           return '<article class="poster-pending"><div><b>' + esc(label) + '</b><small>' + esc(p.collection) + ' · ' + esc(dateText(d.createdAt)) + '</small></div>' +
             '<div><button class="poster-btn primary" data-review="approve" data-col="' + p.collection + '" data-id="' + p.id + '">通過</button>' +
-            '<button class="poster-btn danger" data-review="reject" data-col="' + p.collection + '" data-id="' + p.id + '">拒絕</button></div></article>';
+            '<button class="poster-btn danger" data-review="reject" data-col="' + p.collection + '" data-id="' + p.id + '">拒絕</button>' +
+            '<button class="poster-btn danger" data-del="' + p.collection + '" data-id="' + p.id + '" title="直接刪除">🗑</button></div></article>';
         }).join('') : '<p class="poster-empty">目前沒有待審核項目。</p>');
       box.querySelectorAll('[data-review]').forEach(function (b) {
         b.addEventListener('click', async function () {
@@ -409,6 +464,11 @@
             await refreshData(true);
             if (activeTab === 'admin') loadPending();
           } catch (e) { notify('審核失敗：' + (e.code || e.message), 6000); }
+        });
+      });
+      box.querySelectorAll('[data-del]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          askDelete(b.dataset.del, b.dataset.id);
         });
       });
     } catch (e) {
@@ -444,12 +504,8 @@
     if (authAPI && authAPI.onAuthStateChanged) {
       authAPI.onAuthStateChanged(authAPI.auth, function (user) {
         currentUser = user || null;
-        // 不管在哪個路由都重繪；若在 #poster 才抓資料
-        if (location.hash.indexOf('#poster') === 0) {
-          refreshData(true);
-        } else {
-          render();
-        }
+        if (location.hash.indexOf('#poster') === 0) refreshData(true);
+        else render();
       });
     }
     window.addEventListener('hashchange', showPosterRoute);
