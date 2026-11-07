@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Anime Vinyl">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="poster.css">
 </head>
 <body>
 
@@ -140,6 +141,7 @@
         <button class="btn-block" id="guestExploreBtn" type="button" style="font-size: 16px;">
           🌐 探索公開廣場歌單
         </button>
+        <button class="btn-block" type="button" onclick="location.hash='#poster'">🎬 電影海報特典情報</button>
       </div>
     </div>
 
@@ -148,6 +150,7 @@
         <button class="btn-block primary" id="createPlaylistBtn" type="button">＋ 建立新歌單</button>
         <button class="btn-block" id="goToExploreBtn" type="button">🌐 探索歌單廣場</button>
         <button class="btn-block" id="goToNfcBtn" type="button">🏷️ 將歌單寫入 NFC 標籤</button>
+        <button class="btn-block" type="button" onclick="location.hash='#poster'">🎬 電影海報特典情報</button>
       </div>
       <div class="playlist-grid" id="playlistGrid"></div>
     </div>
@@ -222,6 +225,18 @@
         開始寫入標籤
       </button>
     </div>
+  </div>
+</main>
+
+<!-- ============ 電影海報特典情報 ============ -->
+<main id="viewPoster" hidden>
+  <div class="edit-wrap poster-wrap">
+    <div class="edit-topbar">
+      <a href="#home" class="back-link" style="position:static">← Anime Vinyl</a>
+      <h1>Anime Poster</h1>
+      <span></span>
+    </div>
+    <div id="posterApp"><p class="poster-muted">正在載入電影特典情報…</p></div>
   </div>
 </main>
 
@@ -393,5 +408,6 @@
   }
 </script>
 <script src="app.js" defer></script>
+<script src="poster.js" defer></script>
 </body>
 </html>
