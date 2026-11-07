@@ -1,5 +1,5 @@
 /* Anime Vinyl - Anime Poster / 電影特典情報模組
- * 獨立於 app.js；路由 #poster。
+ * 獨立於 app.js；路由 #poster, #poster/cinema/{id}
  * 集合：movies / bonuses / cinemas / branches / stock_reports / favorites
  */
 (function () {
@@ -11,11 +11,12 @@
   var mySubs = { movies: [], bonuses: [], stock_reports: [] };
   var activeTab = 'movies', searchText = '', busy = false, lastRefresh = 0;
   var cinemaCityFilter = ''; 
+  var currentCinemaId = null; // 用於影城詳細頁
 
   var ADMIN_UIDS = ['CHcuRjAB6eWdmIiV9QGH209mSa93'];
 
   // ==========================================
-  // 全台影城預設資料 (用於一鍵匯入)
+  // 全台影城預設資料
   // ==========================================
   var DEFAULT_CINEMAS = {
     "台北市": ["台北信義威秀影城","MUVIE CINEMAS 台北松仁","誠品電影院","台北大巨蛋秀泰影城","喜樂時代影城南港店","台北南港 LaLaport 威秀影城","台北京站威秀影城","總督影城","微風影城","哈拉影城","國賓大戲院","樂聲影城","台北獅子林新光影城","台北真善美劇院","台北西門威秀影城","喜樂時代影城今日店","百老匯數位影城","光點華山電影館","台北長春國賓影城","台北欣欣秀泰影城","光點台北電影館","美麗華大直影城","美麗新大直皇家影城","台北天母新光影城","景美佳佳戲院"],
@@ -63,15 +64,42 @@
     return owner === currentUser.uid;
   }
 
-  /* ---------- 路由 ---------- */
+  // 檢查冷卻時間 (3分鐘)
+  function checkCooldown() {
+    var last = localStorage.getItem('anime-vinyl:report-cooldown');
+    if (last) {
+      var diff = Date.now() - parseInt(last, 10);
+      if (diff < 180000) {
+        var left = Math.ceil((180000 - diff) / 1000);
+        notify('為了防止洗版，請等待 ' + left + ' 秒後再回報。', 5000);
+        return false;
+      }
+    }
+    return true;
+  }
+  function setCooldown() {
+    localStorage.setItem('anime-vinyl:report-cooldown', Date.now().toString());
+  }
+
+  /* ---------- 路由 (支援 #poster 與 #poster/cinema/xxx) ---------- */
   function showPosterRoute() {
     var isPoster = location.hash === '#poster' || location.hash.indexOf('#poster/') === 0;
     var view = $('viewPoster');
     if (!view) return;
     view.hidden = !isPoster;
+    
     if (isPoster) {
       ['viewEdit','viewPlay','viewError','viewHome','viewNfc','viewExplore'].forEach(function (x) { var el = $(x); if (el) el.hidden = true; });
       document.body.classList.remove('play-mode');
+      
+      var match = location.hash.match(/^#poster\/cinema\/(.+)$/);
+      if (match) {
+        currentCinemaId = match[1];
+        activeTab = 'cinema-detail';
+      } else {
+        currentCinemaId = null;
+        if (activeTab === 'cinema-detail') activeTab = 'cinemas'; // 返回上一頁
+      }
       render();
     }
   }
@@ -90,11 +118,12 @@
         dbAPI.getDocs(dbAPI.query(col('branches'), dbAPI.limit(800))),
         dbAPI.getDocs(dbAPI.query(col('stock_reports'), dbAPI.limit(800)))
       ]);
-      movies = rows(snaps[0]).filter(function (x) { return x.status === 'published'; });
-      bonuses = rows(snaps[1]).filter(function (x) { return x.status === 'published'; });
+      movies = rows(snaps[0]); // 自動化：不再只抓 published
+      bonuses = rows(snaps[1]);
       cinemas = rows(snaps[2]);
       branches = rows(snaps[3]);
-      reports = rows(snaps[4]).filter(function (x) { return x.status === 'approved'; });
+      reports = rows(snaps[4]); // 自動化：全部抓，不再需要 approved
+      
       if (currentUser) {
         var fs = await dbAPI.getDocs(dbAPI.query(col('favorites'), dbAPI.where('uid', '==', currentUser.uid), dbAPI.limit(300)));
         favorites = rows(fs);
@@ -130,20 +159,18 @@
     app.innerHTML = '<div class="poster-notice ' + (error ? 'error' : '') + '">' + esc(text) + '</div>';
   }
 
-  /* ---------- 狀態徽章 ---------- */
-  function statusBadge(s) {
-    if (s === 'pending') return '<span class="poster-status unknown">待審核</span>';
-    if (s === 'published' || s === 'approved') return '<span class="poster-status available">已公開</span>';
-    if (s === 'rejected') return '<span class="poster-status soldout">已拒絕</span>';
-    return '<span class="poster-status">' + esc(s || '未知') + '</span>';
-  }
-
   /* ---------- Header ---------- */
   function header() {
     var adminNote = '';
     if (isAdmin()) {
       adminNote = '<div class="poster-notice" style="margin-bottom:12px">✅ 管理員模式</div>';
     }
+    
+    // 如果在影城詳細頁，顯示返回按鈕
+    if (activeTab === 'cinema-detail') {
+      return '<div style="margin-bottom:12px"><a href="#poster" style="color:var(--accent); text-decoration:none; font-size:14px;">← 返回影城列表</a></div>';
+    }
+
     return '<section class="poster-hero"><div><span class="poster-kicker">ANIME VINYL · COLLECTOR COMMUNITY</span><h2>電影特典情報</h2><p>查詢電影特典、影城分店回報與最新收藏情報。</p></div><div class="poster-hero-mark">🎬</div></section>' +
       adminNote +
       '<div class="poster-toolbar"><input id="posterSearch" type="search" placeholder="搜尋電影、作品或特典…" value="' + esc(searchText) + '"><button class="poster-btn primary" data-action="add-movie">＋ 新增電影／特典</button></div>' +
@@ -157,7 +184,7 @@
       '</nav>';
   }
 
-  /* ---------- 電影卡 ---------- */
+  /* ---------- 卡片渲染 ---------- */
   function movieCard(m) {
     var count = bonuses.filter(function (b) { return b.movieId === m.id; }).length;
     var delBtn = canDelete(m, 'createdBy')
@@ -200,6 +227,7 @@
     '</article>';
   }
 
+  /* ---------- 頁面渲染 ---------- */
   function renderMovies() {
     var q = searchText.toLowerCase();
     var list = movies.filter(function (m) { return (m.title + ' ' + (m.alias || '') + ' ' + (m.description || '')).toLowerCase().indexOf(q) !== -1; });
@@ -214,7 +242,6 @@
       (list.length ? list.map(bonusCard).join('') : '<p class="poster-empty">目前沒有符合條件的特典。</p>') + '</div>';
   }
 
-  /* ---------- 影城分店 ---------- */
   function renderCinemas() {
     var cities = branches.map(function (b) { return b.city; }).filter(Boolean);
     var uniqueCities = Array.from(new Set(cities)).sort();
@@ -226,10 +253,7 @@
       '</select></div>';
 
     var filtered = branches;
-    if (cinemaCityFilter) {
-      filtered = branches.filter(function (b) { return b.city === cinemaCityFilter; });
-    }
-
+    if (cinemaCityFilter) filtered = branches.filter(function (b) { return b.city === cinemaCityFilter; });
     if (searchText) {
       var q = searchText.toLowerCase();
       filtered = filtered.filter(function (b) { return (b.name + ' ' + (b.city||'')).toLowerCase().indexOf(q) !== -1; });
@@ -243,9 +267,8 @@
     });
 
     var keys = Object.keys(grouped).sort();
-
     if (!keys.length) {
-      html += '<p class="poster-empty">找不到符合條件的影城分店。若資料庫目前是空的，請管理員至「管理後台」點擊「一鍵匯入全台影城」。</p>';
+      html += '<p class="poster-empty">找不到影城分店。若為空，請管理員至「管理後台」點擊匯入。</p>';
       return html;
     }
 
@@ -257,12 +280,13 @@
         var cinema = cinemas.find(function (c) { return c.id === br.cinemaId; });
         var reportCount = reports.filter(function (r) { return r.branchId === br.id; }).length;
         
-        html += '<div style="padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(255,255,255,.02);">' +
+        // 改為點擊整張卡片進入詳細頁
+        html += '<div style="padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(255,255,255,.02);cursor:pointer;" data-action="go-cinema" data-id="' + esc(br.id) + '">' +
           '<strong style="color:#fff;font-size:14px;display:block;margin-bottom:4px">' + esc(br.name) + '</strong>' +
           '<small style="color:var(--text-muted);display:block;margin-bottom:8px">' + esc(cinema ? cinema.name : '未知影城') + '</small>' +
           '<div style="display:flex;justify-content:space-between;align-items:center">' +
-            '<span style="font-size:12px;color:var(--text-muted)">共 ' + reportCount + ' 筆特典回報</span>' +
-            '<button class="poster-btn" style="font-size:11px;padding:4px 8px" data-action="city-report" data-id="' + esc(br.id) + '">查詢特典</button>' +
+            '<span style="font-size:12px;color:var(--text-muted)">共 ' + reportCount + ' 筆回報</span>' +
+            '<span style="color:var(--accent);font-size:12px;">查看特典 ❯</span>' +
           '</div>' +
         '</div>';
       });
@@ -272,9 +296,67 @@
     return html;
   }
 
+  /* ---------- 影城詳細頁 (新功能) ---------- */
+  function renderCinemaDetail() {
+    var br = branches.find(function(b){ return b.id === currentCinemaId; });
+    if (!br) return '<p class="poster-empty">找不到該影城，可能已被刪除。</p>';
+    var cinema = cinemas.find(function(c){ return c.id === br.cinemaId; });
+    
+    // 找出這間影城有的所有回報
+    var myReports = reports.filter(function(r){ return r.branchId === br.id; });
+    
+    // 把回報轉換成特典資訊
+    var relatedBonuses = myReports.map(function(r){
+      var b = bonuses.find(function(x){ return x.id === r.bonusId; });
+      return { report: r, bonus: b };
+    }).filter(function(x){ return x.bonus; });
+
+    var html = '<div class="poster-section-head">' +
+      '<h3>' + esc(br.name) + '</h3>' +
+      '<span style="color:var(--accent)">' + esc(cinema ? cinema.name : '') + ' · ' + esc(br.city) + '</span>' +
+      '</div>';
+
+    html += '<div class="poster-toolbar" style="margin-bottom:20px;">' +
+      '<button class="poster-btn primary" style="width:100%;padding:14px;font-size:16px;" data-action="report-here">＋ 回報此影城特典</button>' +
+      '</div>';
+
+    html += '<div class="poster-section-head"><h3>目前特典狀態</h3><span>共 ' + relatedBonuses.length + ' 筆</span></div>';
+
+    if (!relatedBonuses.length) {
+      html += '<div style="padding:40px 20px; text-align:center; border:1px dashed rgba(255,255,255,.15); border-radius:16px; margin-top:10px;">' +
+        '<p class="poster-muted" style="font-size:15px; margin-bottom:16px;">這間影城目前有 0 筆特典回報</p>' +
+        '<button class="poster-btn primary" style="font-size:15px; padding:10px 24px;" data-action="report-here">成為第一個回報的人</button>' +
+        '</div>';
+      return html;
+    }
+
+    html += '<div class="poster-report-list">';
+    relatedBonuses.sort(function(a,b){ return new Date(b.report.createdAt) - new Date(a.report.createdAt); }).forEach(function(item){
+      var b = item.bonus, r = item.report;
+      var m = movies.find(function(x){ return x.id === b.movieId; });
+      var isExpired = (Date.now() - new Date(r.createdAt).getTime()) > 24*60*60*1000;
+      var statusCls = isExpired ? 'unknown' : (r.stockStatus === '尚有庫存' ? 'available' : r.stockStatus === '已兌換完畢' ? 'soldout' : 'unknown');
+      var statusTxt = isExpired ? '資訊已過期' : r.stockStatus;
+      var delBtn = canDelete(r, 'reporterUid') ? '<button type="button" class="poster-btn danger" data-del="stock_reports" data-id="' + esc(r.id) + '" title="刪除">🗑</button>' : '';
+
+      html += '<article style="display:flex;align-items:flex-start;gap:12px; padding:16px; margin-bottom:10px; background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.08); border-radius:12px;">' +
+        '<div style="flex:1">' +
+          '<strong style="color:#fff;font-size:15px;display:block;margin-bottom:4px">' + esc(m ? m.title : '未知電影') + ' - ' + esc(b.title) + '</strong>' +
+          '<small style="color:var(--text-muted);display:block;margin-bottom:8px">回報時間：' + esc(dateText(r.createdAt)) + (r.note ? ' · ' + esc(r.note) : '') + '</small>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">' +
+          '<span class="poster-status ' + statusCls + '">' + esc(statusTxt) + '</span>' +
+          delBtn +
+        '</div>' +
+      '</article>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   function renderReports() {
     var list = reports.slice().sort(function (a,b) { return new Date(b.createdAt) - new Date(a.createdAt); }).slice(0, 100);
-    return '<div class="poster-section-head"><h3>最新庫存回報</h3><span>僅顯示已審核回報</span></div><div class="poster-report-list">' +
+    return '<div class="poster-section-head"><h3>最新庫存回報</h3><span>即時顯示</span></div><div class="poster-report-list">' +
       (list.length ? list.map(function (r) {
         var b = bonuses.find(function (x) { return x.id === r.bonusId; });
         var br = branches.find(function (x) { return x.id === r.branchId; });
@@ -283,7 +365,7 @@
           ? '<button type="button" class="poster-btn danger" data-del="stock_reports" data-id="' + esc(r.id) + '" title="刪除回報">🗑</button>'
           : '';
         return '<article style="display:flex;align-items:center;gap:10px"><div style="flex:1"><strong>' + esc(m ? m.title : '電影') + ' · ' + esc(b ? b.title : '特典') + '</strong><small>' + esc(br ? br.name : '分店') + ' · ' + esc(dateText(r.createdAt)) + '</small></div><span class="poster-status ' + (r.stockStatus === '尚有庫存' ? 'available' : 'soldout') + '">' + esc(r.stockStatus) + '</span>' + delBtn + '</article>';
-      }).join('') : '<p class="poster-empty">目前還沒有已審核的回報。</p>') + '</div>';
+      }).join('') : '<p class="poster-empty">目前還沒有任何回報。</p>') + '</div>';
   }
 
   function renderMine() {
@@ -303,37 +385,40 @@
       }).join('') : '<p class="poster-empty">你還沒有送出任何資料。</p>') + '</div>';
   }
 
-  /* ---------- 管理後台 (加入一鍵匯入) ---------- */
   function renderAdmin() {
     if (!isAdmin()) return '<p class="poster-empty">此頁面僅限管理員使用。</p>';
-    
     var importBtn = '<div style="padding:16px; background:rgba(0,229,255,.05); border:1px solid var(--accent); border-radius:14px; margin-bottom:16px;">' +
       '<h4 style="color:var(--accent); margin:0 0 8px 0;">🚀 快速初始化</h4>' +
-      '<p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">點擊下方按鈕，系統會自動將全台影城與分店資料寫入資料庫。</p>' +
+      '<p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">點擊下方按鈕，系統會自動將全台影城資料寫入資料庫。</p>' +
       '<button id="importCinemasBtn" class="poster-btn primary" style="width:100%; font-size:16px; padding:12px;">一鍵匯入全台影城</button>' +
       '</div>';
-
-    return '<div class="poster-section-head"><h3>管理後台</h3><span>審核與影城資料管理</span></div>' +
+    return '<div class="poster-section-head"><h3>管理後台</h3><span>資料管理 (已啟用自動化防刷)</span></div>' +
       importBtn +
-      '<div id="posterPending"><p class="poster-muted">正在讀取待審核資料…</p></div>' +
-      '<div class="poster-admin-grid">' +
-        '<form id="cinemaForm" class="poster-form"><h4>手動新增影城品牌</h4><label>品牌名稱<input name="name" required maxlength="60" placeholder="例如：威秀影城"></label><button class="poster-btn primary">新增影城</button></form>' +
-        '<form id="branchForm" class="poster-form"><h4>手動新增影城分店</h4><label>影城品牌<select name="cinemaId" required>' + cinemas.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; }).join('') + '</select></label><label>分店名稱<input name="name" required maxlength="80" placeholder="例如：台中大遠百威秀"></label><label>縣市<input name="city" required maxlength="20" placeholder="台中市"></label><label>地址<input name="address" maxlength="150"></label><button class="poster-btn primary">新增分店</button></form>' +
+      '<div style="padding:16px; background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.08); border-radius:14px; margin-bottom:16px;">' +
+      '<h4 style="color:#fff; margin:0 0 8px 0;">🛡️ 黑名單管理</h4>' +
+      '<p style="font-size:13px; color:var(--text-muted);">若發現惡意亂留資料的使用者，請至 Firebase Console 的 <code>users</code> 集合中，將該使用者的 <code>status</code> 設為 <code>banned</code>，即可永久封鎖其發文權限。</p>' +
       '</div>';
   }
 
   function render() {
-    var app = $('posterApp'); if (!app || location.hash.indexOf('#poster') !== 0) return;
-    var body;
-    if (activeTab === 'movies') body = renderMovies();
-    else if (activeTab === 'bonuses') body = renderBonuses();
-    else if (activeTab === 'cinemas') body = renderCinemas();
-    else if (activeTab === 'reports') body = renderReports();
-    else if (activeTab === 'mine') body = renderMine();
-    else body = renderAdmin();
+    var app = $('posterApp'); if (!app) return;
     
-    app.innerHTML = header() + '<section class="poster-content">' + body + '</section>';
+    // 如果是詳細頁，不顯示原本的 Hero 區塊
+    if (activeTab === 'cinema-detail') {
+      app.innerHTML = header() + '<section class="poster-content">' + renderCinemaDetail() + '</section>';
+    } else {
+      var body;
+      if (activeTab === 'movies') body = renderMovies();
+      else if (activeTab === 'bonuses') body = renderBonuses();
+      else if (activeTab === 'cinemas') body = renderCinemas();
+      else if (activeTab === 'reports') body = renderReports();
+      else if (activeTab === 'mine') body = renderMine();
+      else body = renderAdmin();
+      
+      app.innerHTML = header() + '<section class="poster-content">' + body + '</section>';
+    }
 
+    // 綁定搜尋
     var input = $('posterSearch');
     if (input) {
       input.addEventListener('input', function () {
@@ -345,6 +430,7 @@
       });
     }
     
+    // 綁定縣市篩選
     var citySelect = $('cinemaCitySelect');
     if (citySelect) {
       citySelect.addEventListener('change', function () {
@@ -353,25 +439,28 @@
       });
     }
 
+    // 綁定分頁切換
     app.querySelectorAll('[data-tab]').forEach(function (b) {
-      b.addEventListener('click', function () { activeTab = b.dataset.tab; render(); if (activeTab === 'admin') loadPending(); });
+      b.addEventListener('click', function () { 
+        activeTab = b.dataset.tab; 
+        history.replaceState(null, '', '#poster'); // 清除詳細頁路由
+        render(); 
+      });
     });
     
+    // 綁定各種點擊動作
     app.querySelectorAll('[data-action]').forEach(function (b) {
       b.addEventListener('click', function () {
         var act = b.dataset.action;
         if (act === 'add-movie') showMovieForm();
         if (act === 'movie') showMovieDetail(b.dataset.id);
-        if (act === 'report') showReportForm(b.dataset.id);
-        if (act === 'city-report') {
-          var brId = b.dataset.id;
-          var relatedBonuses = bonuses.filter(function (bn) { return reports.some(function (r) { return r.bonusId === bn.id && r.branchId === brId; }); });
-          if (relatedBonuses.length) {
-            var bnames = relatedBonuses.map(function(bn){ return bn.title; }).join('、');
-            notify('該分店有回報的特典：' + bnames, 5000);
-          } else {
-            notify('該分店目前沒有特典回報紀錄', 5000);
-          }
+        if (act === 'report') showReportForm(b.dataset.id); // 帶入特典ID
+        if (act === 'go-cinema') {
+          location.hash = '#poster/cinema/' + b.dataset.id;
+        }
+        if (act === 'report-here') {
+          // 如果在影城詳細頁按回報，直接開回報表單，並帶入 currentCinemaId
+          showReportForm(null, currentCinemaId);
         }
       });
     });
@@ -383,15 +472,11 @@
       });
     });
     
-    // 綁定一鍵匯入按鈕
     var impBtn = $('importCinemasBtn');
-    if (impBtn) {
-      impBtn.addEventListener('click', importDefaultCinemas);
-    }
+    if (impBtn) impBtn.addEventListener('click', importDefaultCinemas);
 
     var cf = $('cinemaForm'); if (cf) cf.addEventListener('submit', saveCinema);
     var bf = $('branchForm'); if (bf) bf.addEventListener('submit', saveBranch);
-    if (activeTab === 'admin') loadPending();
   }
 
   /* ---------- 一鍵匯入腳本 ---------- */
@@ -404,40 +489,26 @@
     notify('開始匯入影城資料...', 5000);
 
     try {
-      // 1. 先把所有縣市當作「影城品牌 (cinemas)」建立
-      var cinemaMap = {}; // 記錄各縣市的 cinemaId
+      var cinemaMap = {}; 
       for (var city in DEFAULT_CINEMAS) {
         var cid = uid();
-        await set('cinemas', cid, {
-          name: city + '在地影城', // 因為每個分店有自己名稱，這裡給個統稱
-          status: 'published',
-          createdAt: stamp(),
-          createdBy: currentUser.uid
-        });
+        await set('cinemas', cid, { name: city + '在地影城', status: 'published', createdAt: stamp(), createdBy: currentUser.uid });
         cinemaMap[city] = cid;
       }
 
-      // 2. 批次寫入分店 (branches)
       var count = 0;
       for (var cityName in DEFAULT_CINEMAS) {
         var cid = cinemaMap[cityName];
         var branchList = DEFAULT_CINEMAS[cityName];
         for (var i = 0; i < branchList.length; i++) {
-          var bname = branchList[i];
           await set('branches', uid(), {
-            cinemaId: cid,
-            name: bname,
-            city: cityName,
-            address: '',
-            status: 'published',
-            createdAt: stamp(),
-            createdBy: currentUser.uid
+            cinemaId: cid, name: branchList[i], city: cityName, address: '',
+            status: 'published', createdAt: stamp(), createdBy: currentUser.uid
           });
           count++;
         }
       }
-
-      notify('🎉 成功匯入 ' + Object.keys(DEFAULT_CINEMAS).length + ' 個縣市，共 ' + count + ' 間分店！', 6000);
+      notify('🎉 成功匯入 ' + count + ' 間分店！', 6000);
       await refreshData(true);
       activeTab = 'cinemas';
       render();
@@ -471,57 +542,31 @@
   }
 
   function showMovieForm() {
-    if (!currentUser) { notify('請先登入才能提交電影與特典資料'); return; }
-    var el = modal('<h3>提交電影與特典資料</h3><p class="poster-muted">提交後會進入待審核區，審核通過才會公開。</p>' +
+    if (!currentUser) { notify('請先登入'); return; }
+    var el = modal('<h3>提交電影與特典資料</h3><p class="poster-muted">送出後將直接公開顯示。</p>' +
       '<form id="newMovieForm" class="poster-form">' +
-        '<h4>電影資料</h4>' +
-        '<label>電影名稱<input name="title" required maxlength="100"></label>' +
-        '<label>別名／原文名稱<input name="alias" maxlength="120"></label>' +
-        '<label>上映日期<input name="releaseDate" type="date"></label>' +
-        '<label>海報圖片網址<input name="posterUrl" type="url" placeholder="https://..."></label>' +
-        '<label>電影介紹<textarea name="description" maxlength="500"></textarea></label>' +
-        '<h4>第一項特典（可稍後再新增）</h4>' +
-        '<label>特典名稱<input name="bonusTitle" maxlength="100" placeholder="例如：首週入場特典"></label>' +
-        '<label>特典類型<select name="type"><option>入場特典</option><option>海報</option><option>明信片</option><option>角色卡</option><option>小冊子</option><option>其他</option></select></label>' +
-        '<label>特典圖片網址<input name="imageUrl" type="url" placeholder="https://..."></label>' +
-        '<label>發放開始<input name="startDate" type="date"></label>' +
-        '<label>發放結束<input name="endDate" type="date"></label>' +
-        '<label>兌換條件<textarea name="conditions" maxlength="500" placeholder="例如：購買當日電影票，每張票兌換一份"></textarea></label>' +
-        '<button class="poster-btn primary" type="submit">送出審核</button>' +
-      '</form>');
+        '<h4>電影資料</h4><label>電影名稱<input name="title" required></label><label>海報圖片網址<input name="posterUrl" type="url"></label>' +
+        '<h4>第一項特典</h4><label>特典名稱<input name="bonusTitle"></label><label>類型<select name="type"><option>入場特典</option><option>海報</option><option>其他</option></select></label>' +
+        '<button class="poster-btn primary" type="submit">送出</button></form>');
     el.querySelector('form').addEventListener('submit', async function (e) {
       e.preventDefault();
-      if (busy) return;
-      busy = true;
+      if (busy) return; busy = true;
       var f = new FormData(e.target);
       var movieId = uid();
       var bonusTitle = String(f.get('bonusTitle') || '').trim();
       try {
         await set('movies', movieId, {
-          title: String(f.get('title')).trim(),
-          alias: String(f.get('alias') || '').trim(),
-          releaseDate: f.get('releaseDate') || '',
-          posterUrl: String(f.get('posterUrl') || '').trim(),
-          description: String(f.get('description') || '').trim(),
-          status: 'pending', createdBy: currentUser.uid, createdAt: stamp(), updatedAt: stamp()
+          title: String(f.get('title')).trim(), posterUrl: String(f.get('posterUrl') || '').trim(),
+          status: 'published', createdBy: currentUser.uid, createdAt: stamp() // 直接發布
         });
         if (bonusTitle) {
           await set('bonuses', uid(), {
-            movieId: movieId, title: bonusTitle,
-            type: String(f.get('type') || '其他'),
-            imageUrl: String(f.get('imageUrl') || '').trim(),
-            startDate: f.get('startDate') || '', endDate: f.get('endDate') || '',
-            conditions: String(f.get('conditions') || '').trim(),
-            status: 'pending', createdBy: currentUser.uid, createdAt: stamp()
+            movieId: movieId, title: bonusTitle, type: String(f.get('type') || '其他'),
+            status: 'published', createdBy: currentUser.uid, createdAt: stamp()
           });
         }
-        el.remove();
-        notify('✅ 已送出，等待管理員審核。已切換到「我的提交」讓你看狀態。', 6000);
-        activeTab = 'mine';
-        await refreshData(true);
-      } catch (err) {
-        notify('送出失敗：' + (err.code || err.message), 6000);
-      }
+        el.remove(); notify('✅ 已新增！', 4000); await refreshData(true);
+      } catch (err) { notify('失敗：' + (err.code || err.message)); }
       finally { busy = false; }
     });
   }
@@ -529,149 +574,65 @@
   function showMovieDetail(movieId) {
     var m = movies.find(function (x) { return x.id === movieId; }); if (!m) return;
     var bs = bonuses.filter(function (b) { return b.movieId === movieId; });
-    var fav = favorites.some(function (f) { return f.targetId === movieId && f.targetType === 'movie'; });
-    var delMovie = canDelete(m, 'createdBy')
-      ? '<button class="poster-btn danger" data-del-detail="movies" data-id="' + esc(movieId) + '">🗑 刪除電影</button>'
-      : '';
     var html = '<div class="poster-detail">' +
-      (m.posterUrl ? '<img src="' + esc(m.posterUrl) + '" alt="電影海報">' : '') +
-      '<div><span class="poster-kicker">MOVIE INFORMATION</span><h3>' + esc(m.title) + '</h3><p>' + esc(m.alias || '') + '</p><p>上映日期：' + esc(dateText(m.releaseDate)) + '</p><p>' + esc(m.description || '暫無介紹') + '</p>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-        '<button class="poster-btn" data-fav="' + (fav ? 'remove' : 'add') + '" data-id="' + esc(movieId) + '">' + (fav ? '★ 已收藏' : '☆ 收藏電影') + '</button>' +
-        delMovie +
-      '</div></div></div>' +
-      '<h4>相關特典</h4><div class="poster-bonus-grid">' + (bs.length ? bs.map(bonusCard).join('') : '<p class="poster-empty">目前沒有已公開的特典。</p>') + '</div>';
+      (m.posterUrl ? '<img src="' + esc(m.posterUrl) + '" alt="">' : '') +
+      '<div><h3>' + esc(m.title) + '</h3><p>' + esc(m.description || '暫無介紹') + '</p></div></div>' +
+      '<h4>相關特典</h4><div class="poster-bonus-grid">' + (bs.length ? bs.map(bonusCard).join('') : '<p class="poster-empty">無特典。</p>') + '</div>';
     var el = modal(html);
-    var favBtn = el.querySelector('[data-fav]');
-    if (favBtn) favBtn.addEventListener('click', function () { toggleFavorite('movie', movieId); el.remove(); });
     el.querySelectorAll('[data-action="report"]').forEach(function (b) {
       b.addEventListener('click', function () { el.remove(); showReportForm(b.dataset.id); });
     });
-    el.querySelectorAll('[data-del-detail]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (!confirm('確定要刪除這部電影嗎？相關特典不會自動刪除，請自行確認。')) return;
-        dbAPI.deleteDoc(doc(b.dataset.delDetail, b.dataset.id)).then(function () {
-          notify('✅ 已刪除電影'); el.remove(); refreshData(true);
-        }).catch(function (e) { notify('刪除失敗：' + (e.code || e.message), 6000); });
-      });
-    });
   }
 
-  function showReportForm(bonusId) {
-    if (!currentUser) { notify('請先登入才能回報庫存'); return; }
-    if (!branches.length) { notify('目前尚無可選分店，請洽管理員新增影城分店'); return; }
-    var bonus = bonuses.find(function (b) { return b.id === bonusId; });
-    var el = modal('<h3>回報特典庫存</h3><p class="poster-muted">' + esc(bonus ? bonus.title : '特典') + '</p>' +
+  /* ---------- 回報表單 (支援預設影城) ---------- */
+  function showReportForm(bonusId, presetBranchId) {
+    if (!currentUser) { notify('請先登入'); return; }
+    if (!checkCooldown()) return; // 防刷檢查
+
+    if (!bonuses.length) { notify('目前沒有特典可供回報'); return; }
+    if (!branches.length) { notify('目前沒有影城分店'); return; }
+
+    var bonusOpts = bonuses.map(function (b) { return '<option value="' + esc(b.id) + '" ' + (b.id === bonusId ? 'selected' : '') + '>' + esc(b.title) + '</option>'; }).join('');
+    var branchOpts = branches.map(function (br) { 
+      var c = cinemas.find(function(x){return x.id===br.cinemaId;});
+      return '<option value="' + esc(br.id) + '" ' + (br.id === presetBranchId ? 'selected' : '') + '>' + esc(br.city + ' · ' + (c?c.name:'') + br.name) + '</option>'; 
+    }).join('');
+
+    var el = modal('<h3>回報特典庫存</h3>' +
       '<form id="stockForm" class="poster-form">' +
-        '<label>影城分店<select name="branchId" required>' +
-          branches.slice().sort(function (a,b) { return (a.city || '').localeCompare(b.city || '') || a.name.localeCompare(b.name); }).map(function (br) {
-            var c = cinemas.find(function (x) { return x.id === br.cinemaId; });
-            return '<option value="' + esc(br.id) + '">' + esc((br.city || '') + ' · ' + (c ? c.name + ' ' : '') + br.name) + '</option>';
-          }).join('') +
-        '</select></label>' +
-        '<label>目前狀態<select name="stockStatus"><option>尚有庫存</option><option>已兌換完畢</option><option>尚未確認</option></select></label>' +
-        '<label>補充說明<textarea name="note" maxlength="300" placeholder="例如：今日下午仍可兌換"></textarea></label>' +
-        '<button class="poster-btn primary">送出回報</button>' +
+        '<label>選擇特典<select name="bonusId" required>' + bonusOpts + '</select></label>' +
+        '<label>影城分店<select name="branchId" required>' + branchOpts + '</select></label>' +
+        '<label>目前狀態<select name="stockStatus"><option>尚有庫存</option><option>已兌換完畢</option></select></label>' +
+        '<label>備註 (選填)<textarea name="note" maxlength="100" placeholder="例如：需要買全票"></textarea></label>' +
+        '<button class="poster-btn primary" type="submit">送出回報</button>' +
       '</form>');
+      
     el.querySelector('form').addEventListener('submit', async function (e) {
       e.preventDefault();
       var f = new FormData(e.target);
       try {
         await set('stock_reports', uid(), {
-          bonusId: bonusId, branchId: String(f.get('branchId')),
+          bonusId: String(f.get('bonusId')), branchId: String(f.get('branchId')),
           stockStatus: String(f.get('stockStatus')),
           note: String(f.get('note') || '').trim(),
-          status: 'pending', reporterUid: currentUser.uid, createdAt: stamp()
+          status: 'approved', // 自動化：送出即通過
+          reporterUid: currentUser.uid, createdAt: stamp()
         });
+        setCooldown(); // 鎖定 3 分鐘
         el.remove();
-        notify('✅ 回報已送出，等待審核。已切換到「我的提交」。', 6000);
-        activeTab = 'mine';
+        notify('✅ 回報成功！已自動公開。', 5000);
         await refreshData(true);
       } catch (err) { notify('回報失敗：' + (err.code || err.message), 6000); }
     });
   }
 
-  async function toggleFavorite(type, targetId) {
-    if (!currentUser) { notify('請先登入才能收藏'); return; }
-    var existing = favorites.find(function (f) { return f.targetType === type && f.targetId === targetId; });
-    try {
-      if (existing) await dbAPI.deleteDoc(doc('favorites', existing.id));
-      else await set('favorites', uid(), { uid: currentUser.uid, targetType: type, targetId: targetId, createdAt: stamp() });
-      await refreshData(true);
-      notify(existing ? '已取消收藏' : '已加入收藏');
-    } catch (e) { notify('收藏失敗：' + (e.code || e.message)); }
-  }
-
-  async function loadPending() {
-    var box = $('posterPending'); if (!box || !isAdmin()) return;
-    try {
-      var names = ['movies','bonuses','stock_reports'];
-      var snaps = await Promise.all(names.map(function (n) { return dbAPI.getDocs(dbAPI.query(col(n), dbAPI.where('status', '==', 'pending'), dbAPI.limit(100))); }));
-      var pending = [];
-      snaps.forEach(function (s, i) { s.forEach(function (d) { pending.push({ collection: names[i], id: d.id, data: d.data() }); }); });
-      box.innerHTML = '<h4>待審核項目（' + pending.length + '）</h4>' +
-        (pending.length ? pending.map(function (p) {
-          var d = p.data;
-          var label = p.collection === 'movies' ? '電影：' + (d.title || '') :
-                      p.collection === 'bonuses' ? '特典：' + (d.title || '') :
-                      '庫存回報：' + (d.stockStatus || '');
-          return '<article class="poster-pending"><div><b>' + esc(label) + '</b><small>' + esc(p.collection) + ' · ' + esc(dateText(d.createdAt)) + '</small></div>' +
-            '<div><button class="poster-btn primary" data-review="approve" data-col="' + p.collection + '" data-id="' + p.id + '">通過</button>' +
-            '<button class="poster-btn danger" data-review="reject" data-col="' + p.collection + '" data-id="' + p.id + '">拒絕</button>' +
-            '<button class="poster-btn danger" data-del="' + p.collection + '" data-id="' + p.id + '" title="直接刪除">🗑</button></div></article>';
-        }).join('') : '<p class="poster-empty">目前沒有待審核項目。</p>');
-      box.querySelectorAll('[data-review]').forEach(function (b) {
-        b.addEventListener('click', async function () {
-          var status = b.dataset.review === 'approve' ? (b.dataset.col === 'stock_reports' ? 'approved' : 'published') : 'rejected';
-          try {
-            var ref = doc(b.dataset.col, b.dataset.id);
-            var snap = await dbAPI.getDoc(ref);
-            var old = snap.data() || {};
-            await dbAPI.setDoc(ref, Object.assign({}, old, { status: status, reviewedBy: currentUser.uid, reviewedAt: stamp() }));
-            notify('審核完成');
-            await refreshData(true);
-            if (activeTab === 'admin') loadPending();
-          } catch (e) { notify('審核失敗：' + (e.code || e.message), 6000); }
-        });
-      });
-      box.querySelectorAll('[data-del]').forEach(function (b) {
-        b.addEventListener('click', function () {
-          askDelete(b.dataset.del, b.dataset.id);
-        });
-      });
-    } catch (e) {
-      box.innerHTML = '<p class="poster-notice error">無法讀取待審核資料：' + esc(e.code || e.message) + '</p>';
-    }
-  }
-
-  async function saveCinema(e) {
-    e.preventDefault(); if (!isAdmin()) return;
-    var f = new FormData(e.target);
-    try {
-      await set('cinemas', uid(), { name: String(f.get('name')).trim(), status: 'published', createdAt: stamp(), createdBy: currentUser.uid });
-      notify('影城品牌已新增'); await refreshData(true);
-    } catch (err) { notify('新增失敗：' + (err.code || err.message)); }
-  }
-  async function saveBranch(e) {
-    e.preventDefault(); if (!isAdmin()) return;
-    var f = new FormData(e.target);
-    try {
-      await set('branches', uid(), {
-        cinemaId: String(f.get('cinemaId')), name: String(f.get('name')).trim(),
-        city: String(f.get('city')).trim(), address: String(f.get('address') || '').trim(),
-        status: 'published', createdAt: stamp(), createdBy: currentUser.uid
-      });
-      notify('分店已新增'); await refreshData(true);
-    } catch (err) { notify('新增失敗：' + (err.code || err.message)); }
-  }
-
+  /* ---------- 啟動 ---------- */
   function start() {
     authAPI = window.firebaseAuth; dbAPI = window.firebaseDB;
     if (authAPI && authAPI.onAuthStateChanged) {
       authAPI.onAuthStateChanged(authAPI.auth, function (user) {
         currentUser = user || null;
         if (location.hash.indexOf('#poster') === 0) refreshData(true);
-        else render();
       });
     }
     window.addEventListener('hashchange', showPosterRoute);
@@ -681,8 +642,4 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
-  window.addEventListener('firebaseReady', function () {
-    if (!authAPI) { authAPI = window.firebaseAuth; dbAPI = window.firebaseDB; }
-    if (location.hash.indexOf('#poster') === 0) refreshData(true);
-  });
 })();
